@@ -354,3 +354,119 @@ body{
   transform: scale(0.95);
   box-shadow: 0 6px 14px rgba(2,6,23,0.25);
 }
+/* =========================
+   ADD SPOT MODAL
+========================= */
+
+.modal{
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(2,6,23,0.45);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+}
+
+.modal.hidden{
+  display: none;
+}
+
+.modalCard{
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+}
+
+.modalHeader{
+  background: #b77a12; /* premium gold */
+  color: #fff;
+  padding: 14px;
+}
+
+.modalTitle{
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.modalSub{
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.95;
+}
+
+.modalClose{
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  border: 0;
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.modalBody{
+  padding: 14px;
+}
+
+.modalBody label{
+  display: block;
+  font-weight: 800;
+  margin-top: 12px;
+}
+
+.modalBody input{
+  width: 100%;
+  margin-top: 6px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(2,6,23,0.12);
+  font-family: "Hind Siliguri", system-ui;
+  font-weight: 700;
+}
+
+.pinRow{
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pinText{
+  font-weight: 700;
+  font-size: 13px;
+  color: #334155;
+}
+
+.pinBtn{
+  border: 0;
+  background: #eef2f7;
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.submitBtn{
+  margin-top: 18px;
+  width: 100%;
+  border: 0;
+  border-radius: 16px;
+  padding: 12px;
+  background: #275130;
+  color: #fff;
+  font-weight: 900;
+  font-size: 15px;
+  cursor: pointer;
+}
