@@ -1,6 +1,12 @@
 // =============================
-// app.js (FULL REPLACE)
-// Rajshahi Iftar: map + countdown + sheet + add spot + voting
+// app.js (FULL REPLACE - FIXED)
+// - Rajshahi locked map
+// - Iftar countdown (Rajshahi Maghrib)
+// - Smooth bottom sheet drag
+// - Add spot modal + map click pick (FIXED: modal no longer blocks map)
+// - Firestore spots load + add
+// - Voting (truth/fake) 1 per user (docId spotId_uid)
+// - Auth "signing..." stuck fix (await ensureAuthReady)
 // =============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -38,16 +44,32 @@ const auth = getAuth(fbApp);
 let me = null;
 let authReady = false;
 
-// Sign in anonymously
+/* =============================
+   Helper: wait for auth (NO STUCK)
+============================= */
+function ensureAuthReady(timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    if (auth.currentUser?.uid) return resolve(auth.currentUser);
+
+    const t = setTimeout(() => {
+      unsub?.();
+      reject(new Error("Auth timeout"));
+    }, timeoutMs);
+
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (u?.uid) {
+        clearTimeout(t);
+        unsub?.();
+        resolve(u);
+      }
+    });
+  });
+}
+
 signInAnonymously(auth).catch((e) => console.error("Anonymous auth error:", e));
 
-onAuthStateChanged(auth, (u) => {
-  me = u;
-  authReady = !!u?.uid;
-});
-
 /* =============================
-   1) Rajshahi Map
+   1) Rajshahi Map (LOCKED)
 ============================= */
 const rajshahiCenter = [24.3745, 88.6042];
 const rajshahiBounds = L.latLngBounds([24.30, 88.50], [24.45, 88.70]);
@@ -66,13 +88,14 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 map.on("drag", () => map.panInsideBounds(rajshahiBounds, { animate: false }));
 
-// Fix blank/grey tiles on load
-setTimeout(() => {
-  map.invalidateSize(true);
-}, 350);
+setTimeout(() => map.invalidateSize(true), 350);
+
+function isInRajshahi(lat, lng) {
+  return lat >= 24.30 && lat <= 24.45 && lng >= 88.50 && lng <= 88.70;
+}
 
 /* =============================
-   2) Iftar Countdown (Rajshahi Maghrib)
+   2) Iftar Countdown (Rajshahi)
 ============================= */
 const countdownEl = document.getElementById("countdown");
 
@@ -82,22 +105,18 @@ async function startCountdown() {
       "https://api.aladhan.com/v1/timingsByCity?city=Rajshahi&country=Bangladesh&method=2"
     );
     const js = await res.json();
-    const maghrib = js?.data?.timings?.Maghrib; // "HH:MM"
-    if (!maghrib) throw new Error("Maghrib time missing");
+    const maghrib = js?.data?.timings?.Maghrib;
+    if (!maghrib) throw new Error("Maghrib missing");
 
     const [mh, mm] = maghrib.split(":").map(Number);
 
     setInterval(() => {
       const now = new Date();
-
       const target = new Date(now);
       target.setHours(mh, mm, 0, 0);
-
-      // if already passed today, count to tomorrow
       if (target.getTime() < now.getTime()) target.setDate(target.getDate() + 1);
 
       const diff = target.getTime() - now.getTime();
-
       const h = Math.floor(diff / 3600000);
       const m = Math.floor((diff % 3600000) / 60000);
       const s = Math.floor((diff % 60000) / 1000);
@@ -148,9 +167,8 @@ function onStart(e) {
 function onMove(e) {
   if (!dragging) return;
   if (e.cancelable) e.preventDefault();
-
   const y = e.touches ? e.touches[0].clientY : e.clientY;
-  const dy = startY - y; // up positive
+  const dy = startY - y;
   setSheetHeight(startH + dy);
 }
 
@@ -187,7 +205,7 @@ handle.addEventListener("touchstart", onStart, { passive: true });
 const listEl = document.getElementById("list");
 const countEl = document.getElementById("spotCount");
 
-// Modal refs
+// modal refs
 const addSpotBtn = document.getElementById("addSpotBtn");
 const modal = document.getElementById("addSpotModal");
 const closeModalBtn = document.getElementById("closeModal");
@@ -199,20 +217,42 @@ const pickedLatLngEl = document.getElementById("pickedLatLng");
 const submitSpotBtn = document.getElementById("submitSpotBtn");
 
 /* =============================
-   5) Data State
+   5) Auth state → button sync
 ============================= */
-let spots = []; // {id,name,area,lat,lng,createdBy,createdAt, truthCount,fakeCount,myVote}
-let markerLayer = L.layerGroup().addTo(map);
-
-function isInRajshahi(lat, lng) {
-  return lat >= 24.30 && lat <= 24.45 && lng >= 88.50 && lng <= 88.70;
+function syncSubmitBtnState() {
+  if (!submitSpotBtn) return;
+  if (auth.currentUser?.uid) {
+    submitSpotBtn.disabled = false;
+    submitSpotBtn.textContent = "স্পট যোগ করুন";
+  } else {
+    submitSpotBtn.disabled = true;
+    submitSpotBtn.textContent = "সাইনিং হচ্ছে…";
+  }
 }
 
+onAuthStateChanged(auth, (u) => {
+  me = u;
+  authReady = !!u?.uid;
+  syncSubmitBtnState();
+});
+
 /* =============================
-   6) Load Spots + Votes
+   6) Data + Map markers
 ============================= */
+let spots = [];
+let markerLayer = L.layerGroup().addTo(map);
+
+function escapeHtml(str) {
+  return String(str || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 async function loadSpotsAndVotes() {
-  // load spots
+  // spots
   const spotSnap = await getDocs(collection(db, "spots"));
   const newSpots = [];
   spotSnap.forEach((d) => {
@@ -226,7 +266,7 @@ async function loadSpotsAndVotes() {
     });
   });
 
-  // load votes (simple approach)
+  // votes
   const voteSnap = await getDocs(collection(db, "votes"));
   const votesBySpot = new Map();
 
@@ -237,12 +277,9 @@ async function loadSpotsAndVotes() {
     votesBySpot.get(v.spotId).push(v);
   });
 
-  // apply counts + my vote
   for (const s of newSpots) {
     const arr = votesBySpot.get(s.id) || [];
-    let t = 0,
-      f = 0,
-      my = null;
+    let t = 0, f = 0, my = null;
 
     for (const v of arr) {
       if (v.value === "truth") t++;
@@ -264,9 +301,7 @@ function renderMarkers() {
   for (const s of spots) {
     if (typeof s.lat !== "number" || typeof s.lng !== "number") continue;
     const m = L.marker([s.lat, s.lng]);
-    m.bindPopup(
-      `<b>${escapeHtml(s.name || "")}</b><br/>${escapeHtml(s.area || "")}`
-    );
+    m.bindPopup(`<b>${escapeHtml(s.name)}</b><br/>${escapeHtml(s.area)}`);
     markerLayer.addLayer(m);
   }
 }
@@ -279,12 +314,11 @@ function renderList() {
     return;
   }
 
-  listEl.innerHTML = spots
-    .map((s) => {
-      const truth = s.truthCount ?? 0;
-      const fake = s.fakeCount ?? 0;
+  listEl.innerHTML = spots.map((s) => {
+    const truth = s.truthCount ?? 0;
+    const fake = s.fakeCount ?? 0;
 
-      return `
+    return `
       <div class="card">
         <div class="icon">🍽️</div>
         <div class="main">
@@ -307,10 +341,8 @@ function renderList() {
         </div>
       </div>
     `;
-    })
-    .join("");
+  }).join("");
 
-  // bind voting click
   listEl.querySelectorAll(".voteBtn").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const spotId = btn.getAttribute("data-id");
@@ -321,26 +353,29 @@ function renderList() {
 }
 
 /* =============================
-   7) Voting
+   7) Voting (1 per user)
 ============================= */
 async function castVote(spotId, value) {
-  if (!authReady || !me?.uid) return;
+  try {
+    const u = await ensureAuthReady();
+    me = u;
+    authReady = true;
+  } catch {
+    return;
+  }
 
   const voteId = `${spotId}_${me.uid}`;
-
-  // optimistic local update
   const s = spots.find((x) => x.id === spotId);
   if (!s) return;
 
-  // remove previous
+  // optimistic update
   if (s.myVote === "truth") s.truthCount = Math.max(0, (s.truthCount || 0) - 1);
   if (s.myVote === "fake") s.fakeCount = Math.max(0, (s.fakeCount || 0) - 1);
 
-  // add new
   if (value === "truth") s.truthCount = (s.truthCount || 0) + 1;
   if (value === "fake") s.fakeCount = (s.fakeCount || 0) + 1;
-  s.myVote = value;
 
+  s.myVote = value;
   renderList();
 
   try {
@@ -352,107 +387,117 @@ async function castVote(spotId, value) {
     });
   } catch (e) {
     console.error("Vote write failed:", e);
-
-    // rollback by reloading (safe)
     await refreshAll();
   }
 }
 
 /* =============================
-   8) Add Spot Modal + Pin Picking
+   8) Add Spot Modal + Map Pick (FIXED)
 ============================= */
 let pickMode = false;
 let pickedLatLng = null;
 let pickPreviewMarker = null;
 
-addSpotBtn?.addEventListener("click", () => {
-  modal?.classList.remove("hidden");
-});
-
-closeModalBtn?.addEventListener("click", () => {
-  closeModal();
-});
-
 function closeModal() {
   modal?.classList.add("hidden");
+  modal?.classList.remove("pickMode"); // ✅ always remove
+
   pickMode = false;
   pickedLatLng = null;
-  pickedLatLngEl.textContent = "📍 ম্যাপ থেকে লোকেশন দিন";
+
+  if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 ম্যাপ থেকে লোকেশন দিন";
+
   if (pickPreviewMarker) {
     markerLayer.removeLayer(pickPreviewMarker);
     pickPreviewMarker = null;
   }
 }
 
-pickLocationBtn?.addEventListener("click", () => {
-  pickMode = true;
-  pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
+addSpotBtn?.addEventListener("click", () => {
+  modal?.classList.remove("hidden");
+  syncSubmitBtnState();
 });
 
-// click on map to pick
+closeModalBtn?.addEventListener("click", closeModal);
+
+// ✅ Enable pick mode: modal stops blocking map clicks
+pickLocationBtn?.addEventListener("click", () => {
+  pickMode = true;
+  modal?.classList.add("pickMode"); // ✅ allow map click
+
+  if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
+});
+
+// ✅ Map click: select lat/lng
 map.on("click", (e) => {
   if (!pickMode) return;
 
   const { lat, lng } = e.latlng;
 
   if (!isInRajshahi(lat, lng)) {
-    pickedLatLngEl.textContent = "⚠️ রাজশাহীর ভিতরে লোকেশন দিন";
+    if (pickedLatLngEl) pickedLatLngEl.textContent = "⚠️ রাজশাহীর ভিতরে লোকেশন দিন";
     return;
   }
 
   pickMode = false;
+  modal?.classList.remove("pickMode"); // ✅ restore modal blocking
   pickedLatLng = { lat, lng };
-  pickedLatLngEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 
-  // preview marker (temporary)
+  if (pickedLatLngEl) {
+    pickedLatLngEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }
+
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
   pickPreviewMarker = L.marker([lat, lng]).bindPopup("নতুন স্পট লোকেশন");
   markerLayer.addLayer(pickPreviewMarker);
 });
 
-submitSpotBtn?.addEventListener("click", async () => {
-  await submitSpot();
-});
+submitSpotBtn?.addEventListener("click", submitSpot);
 
 async function submitSpot() {
-  if (!authReady || !me?.uid) {
-    // avoid system alerts; just change button text briefly
-    const old = submitSpotBtn.textContent;
-    submitSpotBtn.textContent = "⏳ লগইন হচ্ছে...";
-    setTimeout(() => (submitSpotBtn.textContent = old), 900);
+  // Wait auth (no stuck)
+  submitSpotBtn.disabled = true;
+  submitSpotBtn.textContent = "সাইনিং হচ্ছে…";
+
+  try {
+    const u = await ensureAuthReady();
+    me = u;
+    authReady = true;
+  } catch (e) {
+    console.error(e);
+    submitSpotBtn.disabled = false;
+    submitSpotBtn.textContent = "স্পট যোগ করুন";
     return;
   }
 
-  const name = (spotNameEl.value || "").trim();
-  const area = (spotAreaEl.value || "").trim();
+  const name = (spotNameEl?.value || "").trim();
+  const area = (spotAreaEl?.value || "").trim();
 
   if (!name || !area) {
-    const old = submitSpotBtn.textContent;
+    submitSpotBtn.disabled = false;
     submitSpotBtn.textContent = "⚠️ নাম/এলাকা দিন";
-    setTimeout(() => (submitSpotBtn.textContent = old), 1200);
+    setTimeout(syncSubmitBtnState, 900);
     return;
   }
 
   if (!pickedLatLng) {
-    const old = submitSpotBtn.textContent;
+    submitSpotBtn.disabled = false;
     submitSpotBtn.textContent = "⚠️ লোকেশন দিন";
-    setTimeout(() => (submitSpotBtn.textContent = old), 1200);
+    setTimeout(syncSubmitBtnState, 900);
     return;
   }
 
   if (!isInRajshahi(pickedLatLng.lat, pickedLatLng.lng)) {
-    const old = submitSpotBtn.textContent;
+    submitSpotBtn.disabled = false;
     submitSpotBtn.textContent = "⚠️ রাজশাহীর ভিতরে দিন";
-    setTimeout(() => (submitSpotBtn.textContent = old), 1200);
+    setTimeout(syncSubmitBtnState, 900);
     return;
   }
 
   submitSpotBtn.disabled = true;
-  const oldText = submitSpotBtn.textContent;
-  submitSpotBtn.textContent = "⏳ সাবমিট হচ্ছে...";
+  submitSpotBtn.textContent = "⏳ সাবমিট হচ্ছে…";
 
   try {
-    // write spot
     const docRef = await addDoc(collection(db, "spots"), {
       name,
       area,
@@ -462,7 +507,7 @@ async function submitSpot() {
       createdAt: serverTimestamp(),
     });
 
-    // local add immediately (optimistic)
+    // optimistic add
     spots.unshift({
       id: docRef.id,
       name,
@@ -479,30 +524,21 @@ async function submitSpot() {
     renderMarkers();
     renderList();
 
-    // reset form
-    spotNameEl.value = "";
-    spotAreaEl.value = "";
+    // reset + close
+    if (spotNameEl) spotNameEl.value = "";
+    if (spotAreaEl) spotAreaEl.value = "";
     closeModal();
   } catch (e) {
     console.error("Spot submit failed:", e);
-  } finally {
     submitSpotBtn.disabled = false;
-    submitSpotBtn.textContent = oldText;
+    submitSpotBtn.textContent = "⚠️ পারমিশন/নেট সমস্যা";
+    setTimeout(syncSubmitBtnState, 1200);
   }
 }
 
 /* =============================
-   9) Helpers
+   9) Refresh
 ============================= */
-function escapeHtml(str) {
-  return String(str || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 async function refreshAll() {
   await loadSpotsAndVotes();
   renderMarkers();
