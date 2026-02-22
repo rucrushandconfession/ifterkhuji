@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Admin Dashboard — ইফতার খুঁজুন</title>
   <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
-
   <style>
     body{font-family:'Hind Siliguri',sans-serif;margin:16px;background:#f4f6f5;color:#111}
     h2,h3{margin:10px 0}
@@ -16,14 +15,12 @@
     .soft{background:#e5e7eb;color:#111}
     .card{background:#fff;border-radius:14px;padding:12px;margin:10px 0;box-shadow:0 10px 20px rgba(0,0,0,.08)}
     .muted{opacity:.8;font-size:12px;font-weight:700}
-    .pill{display:inline-block;background:#f3f4f6;border-radius:999px;padding:6px 10px;font-weight:800;font-size:12px;margin-right:6px;margin-top:6px}
     .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
     @media (max-width:600px){ .grid{grid-template-columns:1fr} }
     .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
-    a{color:#1e7f43;text-decoration:none;font-weight:800}
-    .danger{color:#c0392b;font-weight:900}
-    .oktxt{color:#1e7f43;font-weight:900}
-    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
+    .pill{display:inline-block;background:#f3f4f6;border-radius:999px;padding:6px 10px;font-weight:800;font-size:12px;margin-right:6px;margin-top:6px}
+    .mono{font-family:ui-monospace, Menlo, Consolas, monospace;}
+    a{color:#1e7f43;text-decoration:none;font-weight:900}
   </style>
 </head>
 
@@ -41,16 +38,14 @@
     <div id="statusText">Not logged in</div>
     <div class="muted">UID: <span class="mono" id="uidText">—</span></div>
     <div class="muted">Email: <span class="mono" id="emailText">—</span></div>
-    <div class="muted">Admin Check: <span id="adminText" class="danger">Not checked</span></div>
+    <div class="muted">Admin Check: <span id="adminText">—</span></div>
   </div>
 
-  <div class="grid" style="margin-top:12px;">
+  <div class="grid">
     <div class="card"><b>Pending</b><div class="muted" id="mPending">0</div></div>
     <div class="card"><b>Approved</b><div class="muted" id="mApproved">0</div></div>
-    <div class="card"><b>Reports Total</b><div class="muted" id="mReports">0</div></div>
+    <div class="card"><b>Reports</b><div class="muted" id="mReports">0</div></div>
     <div class="card"><b>Total Visits</b><div class="muted" id="mVisits">0</div></div>
-    <div class="card"><b>Online Now</b><div class="muted" id="mOnline">0</div></div>
-    <div class="card"><b>Top Areas</b><div class="muted" id="mAreas">—</div></div>
   </div>
 
   <h3>Pending Queue</h3>
@@ -67,7 +62,6 @@
       getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
-    // ✅ Firebase config (same as site)
     const firebaseConfig = {
       apiKey: "AIzaSyA6SZeKVmNAsd4eAlieCTC7zQzYMenwJEA",
       authDomain: "free-ifter.firebaseapp.com",
@@ -83,7 +77,6 @@
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
 
-    // UI refs
     const loginBtn = document.getElementById("login");
     const logoutBtn = document.getElementById("logout");
     const statusText = document.getElementById("statusText");
@@ -96,54 +89,18 @@
     const mApproved = document.getElementById("mApproved");
     const mReports = document.getElementById("mReports");
     const mVisits = document.getElementById("mVisits");
-    const mOnline = document.getElementById("mOnline");
-    const mAreas = document.getElementById("mAreas");
 
     let currentUser = null;
     let isAdmin = false;
 
-    loginBtn.onclick = async () => {
-      try {
-        await signInWithPopup(auth, provider);
-      } catch (e) {
-        console.error(e);
-        alert("Login failed/cancelled");
-      }
-    };
+    loginBtn.onclick = async () => { await signInWithPopup(auth, provider); };
+    logoutBtn.onclick = async () => { await signOut(auth); };
 
-    logoutBtn.onclick = async () => {
-      try {
-        await signOut(auth);
-      } catch {}
-    };
-
-    // Analytics counters (সবাই দেখতে পারবে)
     onSnapshot(collection(db,"spots_pending"), (snap)=>{ mPending.textContent = snap.size; });
-    onSnapshot(collection(db,"spots_approved"), (snap)=>{
-      mApproved.textContent = snap.size;
-
-      const counts = {};
-      snap.forEach(d=>{
-        const a = (d.data()?.area || "Unknown").trim();
-        counts[a] = (counts[a]||0) + 1;
-      });
-      const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
-      mAreas.textContent = top.length ? top.map(([k,v])=>`${k} (${v})`).join(" • ") : "—";
-    });
+    onSnapshot(collection(db,"spots_approved"), (snap)=>{ mApproved.textContent = snap.size; });
     onSnapshot(collection(db,"reports"), (snap)=>{ mReports.textContent = snap.size; });
-    onSnapshot(doc(db,"stats","global"), (snap)=>{ mVisits.textContent = Number(snap.data()?.totalVisits || 0); });
+    onSnapshot(doc(db,"stats","global"), (snap)=>{ mVisits.textContent = snap.exists()? (snap.data().totalVisits||0):0; });
 
-    onSnapshot(collection(db,"presence"), (snap)=>{
-      const now = Date.now();
-      let online = 0;
-      snap.forEach(d=>{
-        const ms = d.data()?.lastSeen?.toMillis ? d.data().lastSeen.toMillis() : 0;
-        if (ms && now - ms <= 2*60*1000) online++;
-      });
-      mOnline.textContent = online;
-    });
-
-    // Main auth flow
     onAuthStateChanged(auth, async (u) => {
       currentUser = u;
       isAdmin = false;
@@ -152,134 +109,101 @@
         statusText.textContent = "Not logged in";
         uidText.textContent = "—";
         emailText.textContent = "—";
-        adminText.textContent = "Not checked";
-        adminText.className = "danger";
-        pendingEl.innerHTML = `<div class="card"><b>Login করুন</b><div class="muted">Google login করে Approve/Reject করুন</div></div>`;
+        adminText.textContent = "—";
+        pendingEl.innerHTML = `<div class="card"><b>Login করুন</b></div>`;
         return;
       }
 
-      // Logged
       statusText.textContent = "Logged in ✅";
       uidText.textContent = u.uid;
       emailText.textContent = u.email || "—";
 
-      console.log("ADMIN USER:", { uid: u.uid, email: u.email });
+      const adminSnap = await getDoc(doc(db,"admins", u.uid));
+      isAdmin = adminSnap.exists();
+      adminText.textContent = isAdmin ? "✅ Admin OK" : "❌ Not Admin";
 
-      // Admin check
-      try {
-        const adminSnap = await getDoc(doc(db, "admins", u.uid));
-        isAdmin = adminSnap.exists();
-
-        if (!isAdmin) {
-          adminText.textContent = "❌ Not admin (admins/UID doc missing)";
-          adminText.className = "danger";
-          pendingEl.innerHTML = `
-            <div class="card">
-              <b>❌ Admin access নেই</b>
-              <div class="muted">Firestore → admins → Document ID হিসেবে এই UID দিন:</div>
-              <div class="pill mono">${u.uid}</div>
-              <div class="muted">Field দিন: ok = true (boolean)</div>
-            </div>
-          `;
-          return;
-        }
-
-        adminText.textContent = "✅ Admin OK";
-        adminText.className = "oktxt";
-      } catch (e) {
-        console.error("Admin check error:", e);
-        adminText.textContent = "❌ Admin check failed";
-        adminText.className = "danger";
-        pendingEl.innerHTML = `<div class="card"><b>Admin check error</b><div class="muted">${escapeHtml(e?.message||"")}</div></div>`;
-        return;
+      if (!isAdmin){
+        pendingEl.innerHTML = `<div class="card"><b>Admin access নেই</b><div class="pill mono">${u.uid}</div></div>`;
       }
     });
 
-    // Pending list live
-    onSnapshot(collection(db, "spots_pending"), async (snap) => {
-      if (!currentUser) return;
-      if (!isAdmin) return;
+    // Render pending queue
+    onSnapshot(collection(db,"spots_pending"), async (snap) => {
+      if (!currentUser || !isAdmin) return;
 
       pendingEl.innerHTML = "";
-
-      if (snap.empty) {
+      if (snap.empty){
         pendingEl.innerHTML = `<div class="card"><b>✅ Pending নেই</b></div>`;
         return;
       }
 
       snap.forEach((d) => {
-        const s = d.data();
+        const s = d.data() || {};
+        const id = d.id;
+
+        const latNum = Number(s.lat);
+        const lngNum = Number(s.lng);
+        const latTxt = Number.isFinite(latNum) ? latNum.toFixed(5) : "N/A";
+        const lngTxt = Number.isFinite(lngNum) ? lngNum.toFixed(5) : "N/A";
+
         const div = document.createElement("div");
         div.className = "card";
-
         div.innerHTML = `
-          <b>${escapeHtml(s.name)}</b>
-          <div class="muted">${escapeHtml(s.area)} • ${escapeHtml(s.type)}</div>
+          <b>${esc(s.name||"")}</b>
+          <div class="muted">${esc(s.area||"")} • ${esc(s.type||"")}</div>
           <div class="row">
-            <span class="pill">lat: ${Number(s.lat).toFixed(5)}</span>
-            <span class="pill">lng: ${Number(s.lng).toFixed(5)}</span>
-            <span class="pill mono">Doc: ${d.id}</span>
+            <span class="pill">lat: ${latTxt}</span>
+            <span class="pill">lng: ${lngTxt}</span>
+            <span class="pill mono">Doc: ${id}</span>
           </div>
           <div class="row">
-            <button class="ok" data-id="${d.id}" data-act="approve">Approve</button>
-            <button class="no" data-id="${d.id}" data-act="reject">Reject</button>
+            <button class="ok" data-id="${id}" data-act="approve">Approve</button>
+            <button class="no" data-id="${id}" data-act="reject">Reject</button>
           </div>
         `;
-
         pendingEl.appendChild(div);
       });
     });
 
-    // Approve/Reject click
     pendingEl.addEventListener("click", async (e) => {
       const btn = e.target.closest("button");
       if (!btn) return;
-
-      if (!currentUser) return alert("Login করুন");
-      if (!isAdmin) return alert("Admin access নেই");
+      if (!currentUser || !isAdmin) return alert("Admin login করুন");
 
       const id = btn.dataset.id;
       const act = btn.dataset.act;
 
-      const pendingRef = doc(db, "spots_pending", id);
+      const pendingRef = doc(db,"spots_pending", id);
 
-      try {
-        if (act === "approve") {
+      try{
+        if (act === "approve"){
           const snap = await getDoc(pendingRef);
           const data = snap.data();
-          if (!data) return alert("Pending ডাটা পাওয়া যায়নি");
+          if (!data) return alert("Pending ডাটা নেই");
 
-          await setDoc(doc(db, "spots_approved", id), {
+          await setDoc(doc(db,"spots_approved", id), {
             ...data,
-            status: "approved",
+            status:"approved",
             truthCount: 0,
             fakeCount: 0,
-            reportsCount: 0,
             approvedBy: currentUser.uid,
             approvedAt: serverTimestamp()
           });
 
           await deleteDoc(pendingRef);
           alert("✅ Approved & Live!");
-        }
-
-        if (act === "reject") {
+        } else {
           await deleteDoc(pendingRef);
           alert("🗑️ Rejected");
         }
-      } catch (err) {
-        console.error("Approve/reject error:", err);
-        alert("❌ Error: " + (err?.message || "Unknown"));
+      }catch(err){
+        console.error(err);
+        alert("❌ " + (err?.message||""));
       }
     });
 
-    function escapeHtml(str) {
-      return String(str || "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+    function esc(t){
+      return String(t).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
     }
   </script>
 </body>
