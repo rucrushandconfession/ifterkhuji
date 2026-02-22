@@ -494,3 +494,16 @@ body{
     font-size: 13px;
   }
 }
+/* =========================
+   PICK MODE: allow map click
+========================= */
+.modal.pickMode{
+  background: rgba(2,6,23,0.10); /* light dim */
+  pointer-events: none;          /* ✅ let map receive clicks */
+}
+
+.modal.pickMode .modalCard{
+  opacity: 0.35;                 /* visual hint */
+  transform: scale(0.98);
+  pointer-events: none;          /* ✅ card also non-clickable */
+}
