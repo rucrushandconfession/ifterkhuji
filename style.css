@@ -33,7 +33,7 @@ body{
   box-shadow:var(--shadow); cursor:pointer;
 }
 .brandLogo{font-size:18px}
-.brandText{font-weight:900; font-size:12px; line-height:1.05}
+.brandText{font-weight:1000; font-size:12px; line-height:1.05}
 
 .searchWrap{
   flex:1; display:flex; align-items:center; gap:8px;
@@ -51,19 +51,47 @@ body{
 .pillBtn{
   border:none; background:var(--green);
   color:#fff; padding:10px 12px; border-radius:999px;
-  cursor:pointer; box-shadow:var(--shadow); font-weight:900;
+  cursor:pointer; box-shadow:var(--shadow); font-weight:1000;
+}
+
+/* Chips */
+.chipsRow{
+  position:fixed;
+  top:60px;
+  left:10px; right:10px;
+  z-index:1150;
+  display:flex;
+  gap:8px;
+  overflow:auto;
+  padding:6px 2px;
+}
+.chip{
+  border:1px solid rgba(255,255,255,.6);
+  background:rgba(255,255,255,.92);
+  border-radius:999px;
+  padding:8px 10px;
+  font-weight:1000;
+  font-size:12px;
+  cursor:pointer;
+  white-space:nowrap;
+  box-shadow:var(--shadow);
+}
+.chip.active{
+  background:var(--green);
+  color:#fff;
+  border-color:var(--green);
 }
 
 /* Pills */
 .statsRow{
-  position:fixed; top:70px; left:10px; right:10px;
+  position:fixed; top:112px; left:10px; right:10px;
   z-index:1100;
   display:flex; flex-wrap:wrap; gap:8px; align-items:center;
 }
 .statPill{
   background:rgba(255,255,255,.95);
   border-radius:999px; padding:8px 10px;
-  font-weight:900; font-size:13px;
+  font-weight:1000; font-size:13px;
   box-shadow:var(--shadow);
 }
 .statPill.ok{ background:#e9f7ef; }
@@ -85,13 +113,13 @@ body{
   padding-left:2px;
 }
 
-/* Floating add button */
+/* Floating add */
 .fab{
-  position:fixed; right:14px; bottom:170px;
+  position:fixed; right:14px; bottom:190px;
   z-index:1300;
   border:none; background:#f39c12; color:#fff;
   padding:12px 14px; border-radius:999px;
-  font-weight:1000; cursor:pointer;
+  font-weight:1100; cursor:pointer;
   box-shadow:var(--shadow);
 }
 
@@ -101,20 +129,11 @@ body{
   z-index:1250;
   background:var(--green);
   border-radius:20px 20px 0 0;
-  box-shadow:var(--sheet-shadow, var(--shadow));
+  box-shadow:var(--shadow);
   padding:10px 12px 14px;
-  height:85vh;
+  height:42vh;
   display:flex; flex-direction:column;
-  transform:translateY(40vh);
-  transition:transform 220ms cubic-bezier(.2,.8,.2,1);
-  will-change:transform;
-  touch-action:none;
-}
-.sheet.dragging{
-  transition:none;
-}
-body.sheet-dragging{
-  overflow:hidden;
+  transition: height .12s ease;
 }
 .sheetHandle{
   width:60px; height:6px;
@@ -123,40 +142,18 @@ body.sheet-dragging{
   margin:6px auto 10px;
   cursor:grab;
 }
-.sheet.dragging .sheetHandle{cursor:grabbing;}
-.sheet.snap-indicator .sheetHandle{
-  animation:snapPulse 280ms ease-out;
-}
-@keyframes snapPulse{
-  0%{transform:scaleX(1); background:rgba(255,255,255,.6);}
-  50%{transform:scaleX(1.18); background:rgba(255,255,255,.92);}
-  100%{transform:scaleX(1); background:rgba(255,255,255,.6);}
-}
 .sheetHeader{
   display:flex; justify-content:space-between;
   align-items:center; gap:10px; color:#fff;
 }
-.sheetActions{
-  display:flex;
-  align-items:center;
-  gap:8px;
-}
-#sheetCollapseBtn{
-  width:36px;
-  height:36px;
-  padding:0;
-  border-radius:999px;
-  font-size:18px;
-  line-height:1;
-}
-.sheetTitleMain{font-size:16px; font-weight:1000}
-.sheetTitleSub{font-size:12px; opacity:.9}
+.sheetTitleMain{font-size:16px; font-weight:1100}
+.sheetTitleSub{font-size:12px; opacity:.92}
 
 .ghostBtn{
   border:1px solid rgba(255,255,255,.35);
   background:transparent; color:#fff;
   padding:8px 10px; border-radius:999px;
-  cursor:pointer; font-weight:900;
+  cursor:pointer; font-weight:1000;
 }
 .ghostBtn.dark{
   border:1px solid #e5e7eb;
@@ -165,15 +162,11 @@ body.sheet-dragging{
 
 .sheetList{
   margin-top:10px;
-  overflow:hidden;
-  overscroll-behavior:contain;
+  overflow:auto;
   padding-right:2px;
 }
-.sheet.at-max .sheetList{
-  overflow:auto;
-}
 
-/* Cards */
+/* Card */
 .card{
   background:#fff;
   border-radius:var(--radius);
@@ -186,10 +179,10 @@ body.sheet-dragging{
   align-items:flex-start;
   gap:10px;
 }
-.cardTitle{font-weight:1000; font-size:15px; line-height:1.25}
-.cardSub{font-size:12px; color:var(--muted); margin-top:2px}
+.cardTitle{font-weight:1100; font-size:15px; line-height:1.25}
+.cardSub{font-size:12px; color:var(--muted); margin-top:2px; font-weight:900}
 .smallPill{
-  font-size:12px; font-weight:1000;
+  font-size:12px; font-weight:1100;
   padding:6px 8px; border-radius:999px;
   background:#f3f4f6;
 }
@@ -200,7 +193,7 @@ body.sheet-dragging{
   padding:4px 8px;
   border-radius:999px;
   font-size:12px;
-  font-weight:900;
+  font-weight:1000;
 }
 
 .voteRow{
@@ -214,12 +207,48 @@ body.sheet-dragging{
   border-radius:999px;
   padding:8px 10px;
   cursor:pointer;
-  font-weight:1000;
+  font-weight:1100;
   background:#f3f4f6;
 }
 .voteBtn.disabled{
   opacity:.55;
   cursor:not-allowed;
+}
+
+/* Footer */
+.footer{
+  position: fixed;
+  left: 10px;
+  right: 10px;
+  bottom: 6px;
+  z-index: 1400;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  pointer-events:none;
+}
+.footerText{
+  background: rgba(255,255,255,.92);
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-weight: 1100;
+  font-size: 12px;
+  box-shadow: var(--shadow);
+  pointer-events:auto;
+}
+.visitorPills{
+  display:flex;
+  gap:8px;
+  pointer-events:auto;
+}
+.vPill{
+  background: rgba(255,255,255,.92);
+  border-radius: 999px;
+  padding: 8px 10px;
+  font-weight: 1100;
+  font-size: 12px;
+  box-shadow: var(--shadow);
 }
 
 /* Modal */
@@ -243,10 +272,10 @@ body.sheet-dragging{
   align-items:flex-start;
   gap:10px;
 }
-.modalTitle{font-weight:1000; font-size:16px}
+.modalTitle{font-weight:1100; font-size:16px}
 .modalSub{font-size:12px; color:var(--muted); margin-top:2px}
 .form{margin-top:10px}
-.lbl{display:block; font-size:13px; font-weight:1000; margin:10px 0 6px}
+.lbl{display:block; font-size:13px; font-weight:1100; margin:10px 0 6px}
 .inp{
   width:100%;
   padding:12px;
@@ -263,7 +292,7 @@ body.sheet-dragging{
   padding:10px;
   font-size:12px;
   color:#111;
-  font-weight:900;
+  font-weight:1000;
 }
 .latlngRow{
   margin-top:10px;
@@ -277,7 +306,7 @@ body.sheet-dragging{
   background:#f3f4f6;
   border-radius:999px;
   padding:10px 12px;
-  font-weight:1000;
+  font-weight:1100;
   font-size:12px;
 }
 .primaryBtn{
@@ -288,7 +317,7 @@ body.sheet-dragging{
   color:#fff;
   border-radius:14px;
   padding:12px 14px;
-  font-weight:1000;
+  font-weight:1100;
   cursor:pointer;
 }
 .tinyNote{
@@ -297,47 +326,11 @@ body.sheet-dragging{
   color:var(--muted);
 }
 
-
-.appCredit{
-  position:fixed;
-  right:14px;
-  bottom:calc(42vh + 10px);
-  z-index:1240;
-  font-family:'Hind Siliguri', sans-serif;
-  font-size:12px;
-  line-height:1.2;
-  opacity:.7;
-  color:#111;
-  pointer-events:none;
-  user-select:none;
-  text-align:right;
-}
-
-
-.creditVisitors{
-  display:block;
-  margin-top:2px;
-  font-size:12px;
-}
-
-@media (max-width:899px){
-  .appCredit{
-    left:50%;
-    right:auto;
-    transform:translateX(-50%);
-    text-align:center;
-  }
-}
-
 @media (min-width:900px){
   #map{height:70vh}
-  .sheet{left:calc(50% - 240px); right:calc(50% - 240px); width:480px; border-radius:20px; height:85vh}
-  .topbar,.statsRow{left:calc(50% - 240px); right:calc(50% - 240px); width:480px}
+  .sheet{left:calc(50% - 240px); right:calc(50% - 240px); width:480px; border-radius:20px}
+  .topbar,.statsRow,.chipsRow{left:calc(50% - 240px); right:calc(50% - 240px); width:480px}
   .modal{left:calc(50% - 240px); right:calc(50% - 240px); width:480px}
   .fab{right:calc(50% - 240px + 14px)}
-  .appCredit{
-    right:calc(50% - 240px + 14px);
-    left:auto;
-    transform:none;
-  }
+  .footer{left:calc(50% - 240px); right:calc(50% - 240px); width:480px}
 }
