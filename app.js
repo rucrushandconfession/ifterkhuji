@@ -1,5 +1,5 @@
 // =============================
-// app.js (FULL REPLACE - FIXED)
+// app.js (FULL REPLACE - FIXED + PREMIUM POPUP)
 // Project: free-ifter (Rajshahi Iftar)
 // - Rajshahi locked map
 // - Iftar countdown (Rajshahi Maghrib)
@@ -7,6 +7,7 @@
 // - Add spot modal + map click pick (FIXED: modal no longer blocks map)
 // - Firestore spots load + add
 // - Voting (truth/fake) 1 per user (docId spotId_uid)
+// - Premium popup like your 2nd screenshot (green header + votes)
 // - Auth "signing..." stuck fix (await ensureAuthReady)
 // =============================
 
@@ -241,7 +242,7 @@ onAuthStateChanged(auth, (u) => {
 });
 
 /* =============================
-   6) Data + Map markers
+   6) Helpers + Premium Popup HTML
 ============================= */
 let spots = [];
 let markerLayer = L.layerGroup().addTo(map);
@@ -255,8 +256,65 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
+function timeAgoFromTimestamp(ts) {
+  try {
+    if (!ts) return "এইমাত্র";
+    const d = ts?.toDate ? ts.toDate() : new Date(ts);
+    const diff = Date.now() - d.getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return "এইমাত্র";
+    if (m < 60) return `${m} মিনিট আগে`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h} ঘন্টা আগে`;
+    const day = Math.floor(h / 24);
+    return `${day} দিন আগে`;
+  } catch {
+    return "এইমাত্র";
+  }
+}
+
+function buildPremiumPopupHTML(spot) {
+  const title = escapeHtml(spot.name || "");
+  const area = escapeHtml(spot.area || "");
+  const truth = spot.truthCount ?? 0;
+  const fake = spot.fakeCount ?? 0;
+
+  const author = "User";
+  const timeAgo = timeAgoFromTimestamp(spot.createdAt);
+
+  return `
+  <div class="pPopup">
+    <div class="pHead">
+      <div class="pHeadRow">
+        <div class="pAuthor">👤 ${author}</div>
+        <div class="pBadge">✓ নিশ্চিত</div>
+      </div>
+      <div class="pTitle">${title}</div>
+    </div>
+
+    <div class="pBody">
+      <div class="pMetaRow">
+        <div class="pMeta">📍 ${area}</div>
+        <div class="pMeta">🕒 ${timeAgo}</div>
+      </div>
+
+      <div class="pVotes">
+        <button class="pVote good" data-id="${spot.id}" data-v="truth" ${authReady ? "" : "disabled"}>
+          👍 <span>${truth}</span> সত্যি
+        </button>
+        <button class="pVote bad" data-id="${spot.id}" data-v="fake" ${authReady ? "" : "disabled"}>
+          👎 <span>${fake}</span> ভুয়া
+        </button>
+      </div>
+    </div>
+  </div>
+  `;
+}
+
+/* =============================
+   7) Load Spots + Votes
+============================= */
 async function loadSpotsAndVotes() {
-  // spots
   const spotSnap = await getDocs(collection(db, "spots"));
   const newSpots = [];
   spotSnap.forEach((d) => {
@@ -270,7 +328,6 @@ async function loadSpotsAndVotes() {
     });
   });
 
-  // votes
   const voteSnap = await getDocs(collection(db, "votes"));
   const votesBySpot = new Map();
 
@@ -299,17 +356,55 @@ async function loadSpotsAndVotes() {
   spots = newSpots;
 }
 
+/* =============================
+   8) Markers + Premium Popup
+============================= */
 function renderMarkers() {
   markerLayer.clearLayers();
 
   for (const s of spots) {
     if (typeof s.lat !== "number" || typeof s.lng !== "number") continue;
+
     const m = L.marker([s.lat, s.lng]);
-    m.bindPopup(`<b>${escapeHtml(s.name)}</b><br/>${escapeHtml(s.area)}`);
+
+    m.bindPopup(buildPremiumPopupHTML(s), {
+      className: "premiumPopup",
+      closeButton: true,
+      autoPan: true,
+      offset: [0, -10],
+    });
+
+    m.on("popupopen", (ev) => {
+      const root = ev.popup.getElement();
+      if (!root) return;
+
+      const attachHandlers = () => {
+        root.querySelectorAll(".pVote").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const spotId = btn.getAttribute("data-id");
+            const value = btn.getAttribute("data-v");
+
+            await castVote(spotId, value);
+
+            const updated = spots.find((x) => x.id === spotId);
+            if (updated) {
+              ev.popup.setContent(buildPremiumPopupHTML(updated));
+              setTimeout(attachHandlers, 0);
+            }
+          });
+        });
+      };
+
+      attachHandlers();
+    });
+
     markerLayer.addLayer(m);
   }
 }
 
+/* =============================
+   9) Render List (Bottom Sheet)
+============================= */
 function renderList() {
   countEl.textContent = String(spots.length);
 
@@ -318,18 +413,17 @@ function renderList() {
     return;
   }
 
-  listEl.innerHTML = spots.map((s) => {
-    const truth = s.truthCount ?? 0;
-    const fake = s.fakeCount ?? 0;
+  listEl.innerHTML = spots
+    .map((s) => {
+      const truth = s.truthCount ?? 0;
+      const fake = s.fakeCount ?? 0;
 
-    return `
+      return `
       <div class="card">
         <div class="icon">🍽️</div>
         <div class="main">
           <div class="title">${escapeHtml(s.name || "")}</div>
-          <div class="meta">
-            <span>📍 ${escapeHtml(s.area || "")}</span>
-          </div>
+          <div class="meta">📍 ${escapeHtml(s.area || "")}</div>
 
           <div class="voteRow">
             <button class="voteBtn good ${s.myVote === "truth" ? "active" : ""}"
@@ -345,7 +439,8 @@ function renderList() {
         </div>
       </div>
     `;
-  }).join("");
+    })
+    .join("");
 
   listEl.querySelectorAll(".voteBtn").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -357,7 +452,7 @@ function renderList() {
 }
 
 /* =============================
-   7) Voting (1 per user)
+   10) Voting (1 per user)
 ============================= */
 async function castVote(spotId, value) {
   try {
@@ -380,7 +475,9 @@ async function castVote(spotId, value) {
   if (value === "fake") s.fakeCount = (s.fakeCount || 0) + 1;
 
   s.myVote = value;
+
   renderList();
+  renderMarkers();
 
   try {
     await setDoc(doc(db, "votes", voteId), {
@@ -396,7 +493,7 @@ async function castVote(spotId, value) {
 }
 
 /* =============================
-   8) Add Spot Modal + Map Pick (FIXED)
+   11) Add Spot Modal + Map Pick
 ============================= */
 let pickMode = false;
 let pickedLatLng = null;
@@ -404,7 +501,7 @@ let pickPreviewMarker = null;
 
 function closeModal() {
   modal?.classList.add("hidden");
-  modal?.classList.remove("pickMode"); // ✅ always remove
+  modal?.classList.remove("pickMode");
 
   pickMode = false;
   pickedLatLng = null;
@@ -424,15 +521,12 @@ addSpotBtn?.addEventListener("click", () => {
 
 closeModalBtn?.addEventListener("click", closeModal);
 
-// ✅ Enable pick mode: modal stops blocking map clicks
 pickLocationBtn?.addEventListener("click", () => {
   pickMode = true;
-  modal?.classList.add("pickMode"); // ✅ allow map click
-
+  modal?.classList.add("pickMode");
   if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
 });
 
-// ✅ Map click: select lat/lng
 map.on("click", (e) => {
   if (!pickMode) return;
 
@@ -444,7 +538,7 @@ map.on("click", (e) => {
   }
 
   pickMode = false;
-  modal?.classList.remove("pickMode"); // ✅ restore modal blocking
+  modal?.classList.remove("pickMode");
   pickedLatLng = { lat, lng };
 
   if (pickedLatLngEl) {
@@ -459,7 +553,6 @@ map.on("click", (e) => {
 submitSpotBtn?.addEventListener("click", submitSpot);
 
 async function submitSpot() {
-  // Wait auth (no stuck)
   submitSpotBtn.disabled = true;
   submitSpotBtn.textContent = "সাইনিং হচ্ছে…";
 
@@ -511,7 +604,6 @@ async function submitSpot() {
       createdAt: serverTimestamp(),
     });
 
-    // optimistic add
     spots.unshift({
       id: docRef.id,
       name,
@@ -528,7 +620,6 @@ async function submitSpot() {
     renderMarkers();
     renderList();
 
-    // reset + close
     if (spotNameEl) spotNameEl.value = "";
     if (spotAreaEl) spotAreaEl.value = "";
     closeModal();
@@ -541,7 +632,7 @@ async function submitSpot() {
 }
 
 /* =============================
-   9) Refresh
+   12) Refresh + Boot
 ============================= */
 async function refreshAll() {
   await loadSpotsAndVotes();
@@ -549,9 +640,6 @@ async function refreshAll() {
   renderList();
 }
 
-/* =============================
-   10) Boot
-============================= */
 (async function boot() {
   try {
     await loadSpotsAndVotes();
