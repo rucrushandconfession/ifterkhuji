@@ -30,6 +30,7 @@
   <div class="statsRow">
     <div class="statPill" id="totalPill">🌙 আজকের স্পট: 0টি</div>
     <div class="statPill ok" id="verifiedPill">✓ নিশ্চিত: 0টি</div>
+    <div class="statPill" id="visitorsPill">Visitors: -- | Unique: --</div>
     <div class="countdownPill" id="iftarCountdown">🌙 ইফতার কাউন্টডাউন লোড হচ্ছে…</div>
     <div class="hintText" id="hintText">ম্যাপে ট্যাপ করে পিন সেট করুন</div>
   </div>
@@ -42,19 +43,27 @@
 
   <!-- Bottom sheet -->
   <section class="sheet" id="sheet">
-    <div class="sheetHandle"></div>
+    <div class="sheetHandle" id="sheetHandle" aria-label="Drag panel handle"></div>
 
     <div class="sheetHeader">
       <div class="sheetTitle">
         <div class="sheetTitleMain">আজকের সক্রিয় স্পট</div>
-        <div class="sheetTitleSub">RU এলাকার ভিতরে</div>
+        <div class="sheetTitleSub">রাজশাহী এলাকার ভিতরে</div>
       </div>
 
-      <button class="ghostBtn" id="centerRuBtn" type="button">RU Center</button>
+      <div class="sheetActions">
+        <button class="ghostBtn" id="sheetCollapseBtn" type="button" aria-label="Collapse panel">▾</button>
+        <button class="ghostBtn" id="centerRuBtn" type="button">Rajshahi Center</button>
+      </div>
     </div>
 
     <div class="sheetList" id="list"></div>
   </section>
+
+  <footer class="appCredit">
+    Developed by Ru Crush and Confession
+    <span class="creditVisitors" id="visitorFooterCounts">Visitors: -- | Unique: --</span>
+  </footer>
 
   <!-- Modal -->
   <div class="modalBackdrop" id="modalBackdrop" hidden></div>
@@ -90,7 +99,7 @@
       </div>
 
       <button class="primaryBtn" id="submitBtn" type="submit">🌙 এই স্পটটি যোগ করুন</button>
-      <div class="tinyNote">⚠️ RU এলাকার বাইরে হলে যোগ হবে না। স্প্যাম করলে ব্লক হতে পারে (soft protection)।</div>
+      <div class="tinyNote">⚠️ রাজশাহী এলাকার বাইরে হলে যোগ হবে না। স্প্যাম করলে ব্লক হতে পারে (soft protection)।</div>
     </form>
   </div>
 

@@ -101,20 +101,53 @@ body{
   z-index:1250;
   background:var(--green);
   border-radius:20px 20px 0 0;
-  box-shadow:var(--shadow);
+  box-shadow:var(--sheet-shadow, var(--shadow));
   padding:10px 12px 14px;
-  height:42vh;
+  height:85vh;
   display:flex; flex-direction:column;
+  transform:translateY(40vh);
+  transition:transform 220ms cubic-bezier(.2,.8,.2,1);
+  will-change:transform;
+  touch-action:none;
+}
+.sheet.dragging{
+  transition:none;
+}
+body.sheet-dragging{
+  overflow:hidden;
 }
 .sheetHandle{
   width:60px; height:6px;
   background:rgba(255,255,255,.6);
   border-radius:999px;
   margin:6px auto 10px;
+  cursor:grab;
+}
+.sheet.dragging .sheetHandle{cursor:grabbing;}
+.sheet.snap-indicator .sheetHandle{
+  animation:snapPulse 280ms ease-out;
+}
+@keyframes snapPulse{
+  0%{transform:scaleX(1); background:rgba(255,255,255,.6);}
+  50%{transform:scaleX(1.18); background:rgba(255,255,255,.92);}
+  100%{transform:scaleX(1); background:rgba(255,255,255,.6);}
 }
 .sheetHeader{
   display:flex; justify-content:space-between;
   align-items:center; gap:10px; color:#fff;
+}
+.sheetActions{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+#sheetCollapseBtn{
+  width:36px;
+  height:36px;
+  padding:0;
+  border-radius:999px;
+  font-size:18px;
+  line-height:1;
 }
 .sheetTitleMain{font-size:16px; font-weight:1000}
 .sheetTitleSub{font-size:12px; opacity:.9}
@@ -132,8 +165,12 @@ body{
 
 .sheetList{
   margin-top:10px;
-  overflow:auto;
+  overflow:hidden;
+  overscroll-behavior:contain;
   padding-right:2px;
+}
+.sheet.at-max .sheetList{
+  overflow:auto;
 }
 
 /* Cards */
@@ -260,10 +297,47 @@ body{
   color:var(--muted);
 }
 
+
+.appCredit{
+  position:fixed;
+  right:14px;
+  bottom:calc(42vh + 10px);
+  z-index:1240;
+  font-family:'Hind Siliguri', sans-serif;
+  font-size:12px;
+  line-height:1.2;
+  opacity:.7;
+  color:#111;
+  pointer-events:none;
+  user-select:none;
+  text-align:right;
+}
+
+
+.creditVisitors{
+  display:block;
+  margin-top:2px;
+  font-size:12px;
+}
+
+@media (max-width:899px){
+  .appCredit{
+    left:50%;
+    right:auto;
+    transform:translateX(-50%);
+    text-align:center;
+  }
+}
+
 @media (min-width:900px){
   #map{height:70vh}
-  .sheet{left:calc(50% - 240px); right:calc(50% - 240px); width:480px; border-radius:20px}
+  .sheet{left:calc(50% - 240px); right:calc(50% - 240px); width:480px; border-radius:20px; height:85vh}
   .topbar,.statsRow{left:calc(50% - 240px); right:calc(50% - 240px); width:480px}
   .modal{left:calc(50% - 240px); right:calc(50% - 240px); width:480px}
   .fab{right:calc(50% - 240px + 14px)}
+  .appCredit{
+    right:calc(50% - 240px + 14px);
+    left:auto;
+    transform:none;
+  }
 }
