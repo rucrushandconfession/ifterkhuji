@@ -8,13 +8,22 @@ import {
   orderBy,
   serverTimestamp,
   doc,
+  getDoc,
+  setDoc,
+  where,
+  limit,
+  getDocs,
   writeBatch,
-  increment,
-  runTransaction,
-  getDoc
+  increment
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
-/** Firebase config (আপনার দেয়া) */
+import {
+  getAuth,
+  signInAnonymously,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+/** ✅ আপনার Firebase config */
 const firebaseConfig = {
   apiKey: "AIzaSyA6SZeKVmNAsd4eAlieCTC7zQzYMenwJEA",
   authDomain: "free-ifter.firebaseapp.com",
@@ -28,33 +37,33 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-/** Rajshahi bounds + center */
-const RAJSHAHI_CENTER = [24.3745, 88.6042];
-const RAJSHAHI_ZOOM = 13;
-const RAJSHAHI_BOUNDS_COORDS = [
-  [24.22, 88.45], // south-west
-  [24.55, 88.82]  // north-east
-];
-const RAJSHAHI_BOUNDS = L.latLngBounds(RAJSHAHI_BOUNDS_COORDS);
+const auth = getAuth(app);
+signInAnonymously(auth);
 
-/** Device ID (localStorage) */
-const DEVICE_KEY = "ifter_device_id_v1";
-const deviceId = getOrCreateDeviceId();
+let UID = null;
+onAuthStateChanged(auth, (u) => { UID = u?.uid || null; });
 
-/** DOM */
+/** Rajshahi center */
+const RAJSHAHI = [24.3745, 88.6042];
+const map = L.map("map").setView(RAJSHAHI, 14);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+
+const cluster = L.markerClusterGroup();
+map.addLayer(cluster);
+
+/** UI elements */
 const searchInput = document.getElementById("searchInput");
+const chipsRow = document.getElementById("chipsRow");
 const listEl = document.getElementById("list");
 const totalPill = document.getElementById("totalPill");
-const verifiedPill = document.getElementById("verifiedPill");
+const pendingPill = document.getElementById("pendingPill");
 const iftarCountdownEl = document.getElementById("iftarCountdown");
-const hintTextEl = document.getElementById("hintText");
-const visitorsPill = document.getElementById("visitorsPill");
-const visitorFooterCounts = document.getElementById("visitorFooterCounts");
-
+const sheetTitleMain = document.getElementById("sheetTitleMain");
+const sheetTitleSub = document.getElementById("sheetTitleSub");
+const centerBtn = document.getElementById("centerBtn");
 const gpsBtn = document.getElementById("gpsBtn");
-const addSpotBtn = document.getElementById("addSpotBtn");
-const centerRuBtn = document.getElementById("centerRuBtn");
 
+const addSpotBtn = document.getElementById("addSpotBtn");
 const modal = document.getElementById("modal");
 const modalBackdrop = document.getElementById("modalBackdrop");
 const closeModalBtn = document.getElementById("closeModalBtn");
@@ -65,427 +74,264 @@ const spotArea = document.getElementById("spotArea");
 const foodType = document.getElementById("foodType");
 const foodInfo = document.getElementById("foodInfo");
 const latlngPill = document.getElementById("latlngPill");
-const sheetEl = document.getElementById("sheet");
-const sheetHandle = document.getElementById("sheetHandle");
-const sheetCollapseBtn = document.getElementById("sheetCollapseBtn");
 
-/** Leaflet map */
-const map = L.map("map", {
-  center: RAJSHAHI_CENTER,
-  zoom: RAJSHAHI_ZOOM,
-  minZoom: 11,
-  maxZoom: 18,
-  maxBounds: RAJSHAHI_BOUNDS,
-  maxBoundsViscosity: 1.0
-});
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
-L.rectangle(RAJSHAHI_BOUNDS, {
-  color: "#1e7f43",
-  weight: 1,
-  fill: false,
-  opacity: 0.35
-}).addTo(map);
-const markersLayer = L.layerGroup().addTo(map);
+const totalVisitsEl = document.getElementById("totalVisits");
+const onlineNowEl = document.getElementById("onlineNow");
 
-/** Pin */
-let pinMarker = null;
-let pickedLatLng = null;
-let mapPickArmed = false;
+/** Bounds (Rajshahi box) */
+function insideRajshahi(lat, lng){
+  return lat >= 24.33 && lat <= 24.42 && lng >= 88.56 && lng <= 88.70;
+}
 
-/** Anti-spam (client-side soft rate limit) */
-const LAST_SUBMIT_KEY = "ifter_last_submit_ts_v1";
-const SUBMIT_COOLDOWN_MS = 60 * 1000; // 1 মিনিটে ১টা সাবমিট (soft)
-
-/** Visitor counter */
-const VISITOR_COUNTER_DOC = doc(db, "meta", "visitorCounter");
-const VISITOR_UNIQUE_COLLECTION = "visitorUnique";
-const VISITOR_CACHE_KEY = "visitor_counts_cache_v1";
-const VISITOR_HIT_GUARD_MS = 10 * 1000;
-
-/** Approved cache */
-let spotsCache = [];
-
-initBottomSheet();
-initVisitorCounter();
-
-/** Food package */
-function getFoodDetails(type) {
-  if (type === "মিক্স ইফতার") return ["বেগুনি", "ছোলা", "পেঁয়াজু", "হালিম", "শরবত"];
+/** Foods */
+function foodsByType(type){
+  if (type === "মিক্স ইফতার") return ["বেগুনি","ছোলা","পেঁয়াজু","হালিম","শরবত"];
   if (type === "খিচুড়ি") return ["খিচুড়ি"];
   if (type === "বিরিয়ানি") return ["বিরিয়ানি"];
   return [];
 }
+foodType.addEventListener("change", () => {
+  const t = foodType.value || "মিক্স ইফতার";
+  foodInfo.textContent = `${t} = ${foodsByType(t).join(", ")}`;
+});
 
-
-
-/** Bottom sheet drag/snap */
-const SHEET_SNAP = {
-  MIN: 12,
-  MID: 45,
-  MAX: 85
-};
-let sheetCurrentVh = SHEET_SNAP.MID;
-let sheetTargetVh = SHEET_SNAP.MID;
-let sheetRafId = 0;
-let isSheetDragging = false;
-let sheetStartY = 0;
-let sheetStartVh = SHEET_SNAP.MID;
-let lastDragY = 0;
-let lastDragTs = 0;
-let sheetVelocityPxPerMs = 0;
-const SHEET_RUBBER_FACTOR = 0.35;
-let snapIndicatorTimer = null;
-
-function initBottomSheet() {
-  applySheetState(sheetCurrentVh, true);
-
-  sheetHandle?.addEventListener("pointerdown", startSheetDrag);
-  document.querySelector(".sheetHeader")?.addEventListener("pointerdown", startSheetDrag);
-  document.getElementById("list")?.addEventListener("pointerdown", (e) => {
-    if (!sheetEl.classList.contains("at-max")) startSheetDrag(e);
-  });
-
-  sheetCollapseBtn?.addEventListener("click", () => animateSheetTo(SHEET_SNAP.MID));
-
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") animateSheetTo(SHEET_SNAP.MID);
-  });
-
-  window.addEventListener("resize", () => applySheetState(sheetCurrentVh, true));
-}
-
-function startSheetDrag(e) {
-  const interactive = e.target.closest("button, input, select, textarea, a");
-  if (interactive && e.target !== sheetCollapseBtn) return;
-
-  isSheetDragging = true;
-  sheetEl.classList.add("dragging");
-  document.body.classList.add("sheet-dragging");
-
-  sheetStartY = e.clientY;
-  sheetStartVh = sheetCurrentVh;
-  lastDragY = e.clientY;
-  lastDragTs = performance.now();
-  sheetVelocityPxPerMs = 0;
-
-  sheetEl.setPointerCapture?.(e.pointerId);
-  sheetEl.addEventListener("pointermove", onSheetDragMove);
-  sheetEl.addEventListener("pointerup", endSheetDrag);
-  sheetEl.addEventListener("pointercancel", endSheetDrag);
-}
-
-function onSheetDragMove(e) {
-  if (!isSheetDragging) return;
-  const viewportHeight = window.innerHeight || 1;
-  const deltaPx = e.clientY - sheetStartY;
-  const deltaVh = (deltaPx / viewportHeight) * 100;
-  const rawVh = sheetStartVh - deltaVh;
-  const nextVh = applyRubberBand(rawVh, SHEET_SNAP.MIN, SHEET_SNAP.MAX);
-  applySheetState(nextVh, true);
-
-  const now = performance.now();
-  const dt = Math.max(1, now - lastDragTs);
-  sheetVelocityPxPerMs = (e.clientY - lastDragY) / dt;
-  lastDragY = e.clientY;
-  lastDragTs = now;
-}
-
-function endSheetDrag() {
-  if (!isSheetDragging) return;
-  isSheetDragging = false;
-  sheetEl.classList.remove("dragging");
-  document.body.classList.remove("sheet-dragging");
-
-  sheetEl.removeEventListener("pointermove", onSheetDragMove);
-  sheetEl.removeEventListener("pointerup", endSheetDrag);
-  sheetEl.removeEventListener("pointercancel", endSheetDrag);
-
-  const speed = sheetVelocityPxPerMs;
-  if (Math.abs(speed) > 0.8) {
-    const bounded = clamp(sheetCurrentVh, SHEET_SNAP.MIN, SHEET_SNAP.MAX);
-    if (speed < 0) animateSheetTo(nextHigherSnap(bounded));
-    else animateSheetTo(nextLowerSnap(bounded));
-    return;
-  }
-  animateSheetTo(nearestSnap(clamp(sheetCurrentVh, SHEET_SNAP.MIN, SHEET_SNAP.MAX)));
-}
-
-function animateSheetTo(targetVh) {
-  sheetTargetVh = clamp(targetVh, SHEET_SNAP.MIN, SHEET_SNAP.MAX);
-  cancelAnimationFrame(sheetRafId);
-
-  const step = () => {
-    const diff = sheetTargetVh - sheetCurrentVh;
-    if (Math.abs(diff) < 0.2) {
-      applySheetState(sheetTargetVh, true);
-      triggerSnapIndicator();
-      return;
-    }
-    applySheetState(sheetCurrentVh + diff * 0.22, true);
-    sheetRafId = requestAnimationFrame(step);
-  };
-  sheetRafId = requestAnimationFrame(step);
-}
-
-function applySheetState(visibleVh, updateCurrent = false) {
-  const bounded = clamp(visibleVh, SHEET_SNAP.MIN, SHEET_SNAP.MAX);
-  if (updateCurrent) sheetCurrentVh = visibleVh;
-
-  const translateVh = SHEET_SNAP.MAX - visibleVh;
-  const normalized = (bounded - SHEET_SNAP.MIN) / (SHEET_SNAP.MAX - SHEET_SNAP.MIN);
-  const shadowAlpha = (0.12 + normalized * 0.28).toFixed(3);
-  sheetEl.style.setProperty("--sheet-shadow", `0 10px 30px rgba(0,0,0,${shadowAlpha})`);
-  sheetEl.style.transform = `translateY(${translateVh}vh)`;
-  sheetEl.classList.toggle("at-max", bounded >= SHEET_SNAP.MAX - 1.2);
-}
-
-
-
-function applyRubberBand(value, min, max) {
-  if (value < min) return min - (min - value) * SHEET_RUBBER_FACTOR;
-  if (value > max) return max + (value - max) * SHEET_RUBBER_FACTOR;
-  return value;
-}
-
-function triggerSnapIndicator() {
-  sheetEl.classList.remove("snap-indicator");
-  void sheetEl.offsetWidth;
-  sheetEl.classList.add("snap-indicator");
-  clearTimeout(snapIndicatorTimer);
-  snapIndicatorTimer = setTimeout(() => {
-    sheetEl.classList.remove("snap-indicator");
-  }, 320);
-}
-
-function nearestSnap(vh) {
-  const points = [SHEET_SNAP.MIN, SHEET_SNAP.MID, SHEET_SNAP.MAX];
-  return points.reduce((best, p) =>
-    Math.abs(p - vh) < Math.abs(best - vh) ? p : best
-  , points[0]);
-}
-function nextHigherSnap(vh) {
-  if (vh < SHEET_SNAP.MID) return SHEET_SNAP.MID;
-  return SHEET_SNAP.MAX;
-}
-function nextLowerSnap(vh) {
-  if (vh > SHEET_SNAP.MID) return SHEET_SNAP.MID;
-  return SHEET_SNAP.MIN;
-}
-function clamp(n, min, max) {
-  return Math.max(min, Math.min(max, n));
-}
-
-/** Utils */
-function isInsideRajshahi(lat, lng) {
-  return RAJSHAHI_BOUNDS.contains(L.latLng(lat, lng));
-}
-
-function showBanglaToast(message) {
-  const toast = document.createElement("div");
-  toast.textContent = message;
-  toast.style.position = "fixed";
-  toast.style.left = "50%";
-  toast.style.bottom = "calc(42vh + 24px)";
-  toast.style.transform = "translateX(-50%)";
-  toast.style.background = "rgba(17,17,17,.92)";
-  toast.style.color = "#fff";
-  toast.style.padding = "10px 14px";
-  toast.style.borderRadius = "999px";
-  toast.style.fontFamily = "'Hind Siliguri', sans-serif";
-  toast.style.fontSize = "13px";
-  toast.style.zIndex = "2600";
-  toast.style.boxShadow = "0 8px 20px rgba(0,0,0,.28)";
-  toast.style.pointerEvents = "none";
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 1800);
-}
-
-function setPin(lat, lng) {
-  pickedLatLng = { lat, lng };
-  latlngPill.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-
-  if (pinMarker) pinMarker.setLatLng([lat, lng]);
-  else {
-    pinMarker = L.marker([lat, lng], { draggable: true }).addTo(map);
-    pinMarker.on("dragend", () => {
-      const ll = pinMarker.getLatLng();
-      pickedLatLng = { lat: ll.lat, lng: ll.lng };
-      latlngPill.textContent = `📍 ${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
-    });
-  }
-}
-
-function openModal() {
+/** Modal */
+function openModal(){
   modal.hidden = false;
   modalBackdrop.hidden = false;
 }
-function closeModal() {
+function closeModal(){
   modal.hidden = true;
   modalBackdrop.hidden = true;
-  mapPickArmed = false;
 }
+addSpotBtn.addEventListener("click", openModal);
 closeModalBtn.addEventListener("click", closeModal);
 modalBackdrop.addEventListener("click", closeModal);
 
-/** Map click */
+/** Pin picking */
+let picked = null;
+let pinMarker = null;
+let pickArmed = false;
+
+function setPin(lat, lng){
+  picked = {lat, lng};
+  latlngPill.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  if (pinMarker) pinMarker.setLatLng([lat,lng]);
+  else pinMarker = L.marker([lat,lng], { draggable:true }).addTo(map);
+  pinMarker.on("dragend", () => {
+    const ll = pinMarker.getLatLng();
+    picked = { lat: ll.lat, lng: ll.lng };
+    latlngPill.textContent = `📍 ${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
+  });
+}
+
 map.on("click", (e) => {
-  if (!isInsideRajshahi(e.latlng.lat, e.latlng.lng)) {
-    showBanglaToast("শুধু রাজশাহী এলাকার স্পট যোগ করা যাবে");
-    return;
-  }
-
-  if (!mapPickArmed) {
-    // normal map tap -> set pin anyway (helpful)
+  if (!pickArmed) {
+    // helpful: always allow pin set by tapping
     setPin(e.latlng.lat, e.latlng.lng);
-    hintTextEl.textContent = "✅ পিন সেট হয়েছে";
     return;
   }
-
   setPin(e.latlng.lat, e.latlng.lng);
-  hintTextEl.textContent = "✅ পিন সেট হয়েছে, এখন ফর্ম সাবমিট করুন";
-  mapPickArmed = false;
+  pickArmed = false;
 });
 
-/** Top buttons */
-centerRuBtn.addEventListener("click", () => map.fitBounds(RAJSHAHI_BOUNDS));
+pickOnMapBtn.addEventListener("click", () => {
+  pickArmed = true;
+  closeModal();
+  setTimeout(() => openModal(), 350);
+});
 
+/** GPS */
+let userLatLng = null;
 gpsBtn.addEventListener("click", () => {
   if (!navigator.geolocation) return alert("GPS সাপোর্ট নেই।");
   navigator.geolocation.getCurrentPosition(
     (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      if (!isInsideRajshahi(lat, lng)) {
-        showBanglaToast("শুধু রাজশাহী এলাকার স্পট যোগ করা যাবে");
-        map.fitBounds(RAJSHAHI_BOUNDS);
-        return;
-      }
-      setPin(lat, lng);
-      map.setView([lat, lng], 16);
+      userLatLng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+      map.setView([userLatLng.lat, userLatLng.lng], 16);
+      setPin(userLatLng.lat, userLatLng.lng);
     },
     () => alert("GPS permission পাওয়া যায়নি।")
   );
 });
 
-addSpotBtn.addEventListener("click", () => openModal());
+centerBtn.addEventListener("click", () => map.setView(RAJSHAHI, 14));
 
-pickOnMapBtn.addEventListener("click", () => {
-  mapPickArmed = true;
-  hintTextEl.textContent = "📌 এখন ম্যাপে ট্যাপ করুন (পিন সেট হবে)";
-  closeModal(); // ইউজার ম্যাপে ট্যাপ করবে, তারপর আবার modal খুলবে
-  setTimeout(() => openModal(), 400);
+/** Bottom sheet drag */
+const sheet = document.getElementById("sheet");
+const handle = document.getElementById("sheetHandle");
+const SHEET_MIN = 26;  // vh
+const SHEET_MAX = 82;  // vh
+let dragging = false;
+let startY = 0;
+let startH = 42;
+
+function setSheetVh(vh){
+  const clamped = Math.max(SHEET_MIN, Math.min(SHEET_MAX, vh));
+  sheet.style.height = clamped + "vh";
+}
+
+function pointerDown(y){
+  dragging = true;
+  startY = y;
+  startH = parseFloat(getComputedStyle(sheet).height) / window.innerHeight * 100;
+  handle.style.cursor = "grabbing";
+}
+function pointerMove(y){
+  if (!dragging) return;
+  const dy = (y - startY) / window.innerHeight * 100;
+  // drag up => dy negative => height increases
+  setSheetVh(startH - dy);
+}
+function pointerUp(){
+  dragging = false;
+  handle.style.cursor = "grab";
+}
+
+handle.addEventListener("touchstart", (e)=>pointerDown(e.touches[0].clientY), {passive:true});
+window.addEventListener("touchmove", (e)=>pointerMove(e.touches[0].clientY), {passive:true});
+window.addEventListener("touchend", pointerUp);
+
+handle.addEventListener("mousedown", (e)=>{ e.preventDefault(); pointerDown(e.clientY); });
+window.addEventListener("mousemove", (e)=>pointerMove(e.clientY));
+window.addEventListener("mouseup", pointerUp);
+
+/** Search + filter state */
+let filter = "all";
+chipsRow.addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+  [...chipsRow.querySelectorAll(".chip")].forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  filter = btn.dataset.filter || "all";
+  render();
 });
+searchInput.addEventListener("input", render);
 
-/** Food info update */
-foodType.addEventListener("change", () => {
-  const type = foodType.value;
-  if (!type) {
-    foodInfo.textContent = "মিক্স ইফতার = বেগুনি, ছোলা, পেঁয়াজু, হালিম, শরবত";
-    return;
-  }
-  foodInfo.textContent = `${type} = ${getFoodDetails(type).join(", ")}`;
-});
+/** Duplicate detector */
+const DUP_RADIUS_M = 150;
+function normalizeName(s){
+  return String(s||"").trim().toLowerCase().replace(/\s+/g, " ");
+}
+function haversineM(aLat,aLng,bLat,bLng){
+  const R = 6371000;
+  const toRad = (x)=>x*Math.PI/180;
+  const dLat = toRad(bLat-aLat);
+  const dLng = toRad(bLng-aLng);
+  const sa = Math.sin(dLat/2)**2 +
+    Math.cos(toRad(aLat))*Math.cos(toRad(bLat))*Math.sin(dLng/2)**2;
+  return 2*R*Math.asin(Math.sqrt(sa));
+}
+async function isDuplicate(nameLower, lat, lng){
+  const q1 = query(collection(db,"spots_approved"), where("nameLower","==",nameLower), limit(20));
+  const q2 = query(collection(db,"spots_pending"), where("nameLower","==",nameLower), limit(20));
+  const [s1,s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+  const chk = (snap)=>{
+    for (const d of snap.docs){
+      const s = d.data();
+      const dist = haversineM(lat,lng,s.lat,s.lng);
+      if (dist <= DUP_RADIUS_M) return true;
+    }
+    return false;
+  };
+  return chk(s1) || chk(s2);
+}
 
-/** Submit spot (NO LOGIN) */
+/** Submit pending */
 spotForm.addEventListener("submit", async (e) => {
   e.preventDefault();
-
-  // soft anti-spam cooldown
-  const last = Number(localStorage.getItem(LAST_SUBMIT_KEY) || "0");
-  const now = Date.now();
-  if (now - last < SUBMIT_COOLDOWN_MS) {
-    const wait = Math.ceil((SUBMIT_COOLDOWN_MS - (now - last)) / 1000);
-    alert(`⏳ একটু অপেক্ষা করুন (${wait}s)।`);
-    return;
-  }
+  if (!UID) return alert("অপেক্ষা করুন… UID তৈরি হচ্ছে।");
 
   const name = spotName.value.trim();
   const area = spotArea.value.trim();
   const type = foodType.value;
 
-  if (name.length < 3 || area.length < 2 || !type) {
-    alert("সব ফিল্ড ঠিকভাবে দিন।");
-    return;
-  }
-  if (!pickedLatLng) {
-    alert("ম্যাপে ট্যাপ করে পিন সেট করুন।");
-    return;
-  }
+  if (!name || name.length < 3) return alert("নাম কমপক্ষে ৩ অক্ষর দিন।");
+  if (!area || area.length < 2) return alert("এলাকা কমপক্ষে ২ অক্ষর দিন।");
+  if (!type) return alert("টাইপ নির্বাচন করুন।");
+  if (!picked) return alert("ম্যাপে ট্যাপ করে পিন সেট করুন।");
 
-  const { lat, lng } = pickedLatLng;
+  const {lat,lng} = picked;
+  if (!insideRajshahi(lat,lng)) return alert("রাজশাহী এলাকার বাইরে!");
 
-  if (!isInsideRajshahi(lat, lng)) {
-    showBanglaToast("শুধু রাজশাহী এলাকার স্পট যোগ করা যাবে");
-    return;
-  }
+  const nameLower = normalizeName(name);
+  const foods = foodsByType(type);
 
-  const foods = getFoodDetails(type);
+  // duplicate check
+  const dup = await isDuplicate(nameLower, lat, lng);
+  if (dup) return alert("⚠️ ডুপ্লিকেট মনে হচ্ছে (একই নাম + কাছাকাছি)।");
 
-  try {
-    await addDoc(collection(db, "spots"), {
-      name,
-      area,
-      type,
-      foods,
-      lat,
-      lng,
-      truth: 0,
-      fake: 0,
-      deviceId,            // spam analysis (soft)
-      createdAt: serverTimestamp()
-    });
-
-    localStorage.setItem(LAST_SUBMIT_KEY, String(Date.now()));
-
-    alert("✅ স্পট যোগ হয়েছে!");
-    spotForm.reset();
-    pickedLatLng = null;
-    latlngPill.textContent = "📍 পিন সেট হয়নি";
-    if (pinMarker) { map.removeLayer(pinMarker); pinMarker = null; }
-    closeModal();
-  } catch (err) {
-    console.error(err);
-    alert("❌ যোগ হয়নি। Firestore Rules চেক করুন।");
-  }
-});
-
-/** Real-time list */
-const spotsQuery = query(collection(db, "spots"), orderBy("createdAt", "desc"));
-onSnapshot(spotsQuery, (snap) => {
-  const spots = [];
-  snap.forEach((d) => spots.push({ id: d.id, ...d.data() }));
-  spotsCache = spots;
-  renderSpots();
-});
-
-searchInput.addEventListener("input", renderSpots);
-
-function renderSpots() {
-  const rajshahiSpots = spotsCache.filter((s) => isInsideRajshahi(s.lat, s.lng));
-  const outsideSpots = spotsCache.filter((s) => !isInsideRajshahi(s.lat, s.lng));
-
-  // markers (Rajshahi-first; out-of-bound data shown only after Rajshahi results)
-  markersLayer.clearLayers();
-  [...rajshahiSpots, ...outsideSpots].forEach((s) => {
-    L.marker([s.lat, s.lng]).addTo(markersLayer)
-      .bindPopup(`<b>${escapeHtml(s.name)}</b><br/>${escapeHtml(s.area)}<br/>${escapeHtml(s.type)}`);
+  await addDoc(collection(db,"spots_pending"),{
+    name,
+    nameLower,
+    area,
+    type,
+    foods,
+    lat,lng,
+    createdBy: UID,
+    createdAt: serverTimestamp(),
+    status: "pending"
   });
 
-  const q = (searchInput.value || "").trim().toLowerCase();
-  const source = [...rajshahiSpots, ...outsideSpots];
-  const filtered = q
-    ? source.filter(s =>
-        (s.name||"").toLowerCase().includes(q) ||
-        (s.area||"").toLowerCase().includes(q) ||
-        (s.type||"").toLowerCase().includes(q)
-      )
-    : source;
+  alert("✅ Pending জমা হয়েছে। Admin approve করলে লাইভ হবে।");
+  spotForm.reset();
+  picked = null;
+  latlngPill.textContent = "📍 পিন সেট হয়নি (ম্যাপে ট্যাপ করুন)";
+  if (pinMarker) { map.removeLayer(pinMarker); pinMarker = null; }
+  closeModal();
+});
 
+/** Approved cache */
+let approvedCache = [];
+let pendingCount = 0;
+
+/** Listen approved */
+const approvedQ = query(collection(db,"spots_approved"), orderBy("createdAt","desc"));
+onSnapshot(approvedQ, (snap) => {
+  approvedCache = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+  render();
+});
+
+/** Listen pending count */
+onSnapshot(collection(db,"spots_pending"), (snap) => {
+  pendingCount = snap.size;
+  pendingPill.textContent = `⏳ Pending: ${pendingCount}টি`;
+});
+
+/** Render list + markers */
+function render(){
+  // markers
+  cluster.clearLayers();
+
+  const qtxt = (searchInput.value || "").trim().toLowerCase();
+
+  let filtered = approvedCache;
+
+  if (filter !== "all") {
+    if (filter === "truthy") {
+      filtered = filtered.filter(s => Number(s.truthCount||0) > Number(s.fakeCount||0));
+    } else {
+      filtered = filtered.filter(s => (s.type||"") === filter);
+    }
+  }
+
+  if (qtxt) {
+    filtered = filtered.filter(s =>
+      (s.name||"").toLowerCase().includes(qtxt) ||
+      (s.area||"").toLowerCase().includes(qtxt) ||
+      (s.type||"").toLowerCase().includes(qtxt)
+    );
+  }
+
+  // list
   listEl.innerHTML = "";
   filtered.forEach((s) => {
+    cluster.addLayer(
+      L.marker([s.lat,s.lng]).bindPopup(`<b>${escapeHtml(s.name)}</b><br>${escapeHtml(s.area)}<br>${escapeHtml(s.type)}`)
+    );
+
     const foods = Array.isArray(s.foods) ? s.foods : [];
-    const votedKey = `voted_${s.id}`; // local lock
-    const alreadyVoted = localStorage.getItem(votedKey) === "1";
+    const distText = userLatLng ? formatDistance(userLatLng.distanceTo(L.latLng(s.lat,s.lng))) : null;
 
     const card = document.createElement("div");
     card.className = "card";
@@ -493,9 +339,9 @@ function renderSpots() {
       <div class="cardTop">
         <div>
           <div class="cardTitle">${escapeHtml(s.name)}</div>
-          <div class="cardSub">📍 ${escapeHtml(s.area)} • ${escapeHtml(s.type)}</div>
+          <div class="cardSub">📍 ${escapeHtml(s.area)} • ${escapeHtml(s.type)}${distText ? ` • ${distText}` : ""}</div>
         </div>
-        <div class="smallPill">Rajshahi</div>
+        <div class="smallPill">Live</div>
       </div>
 
       <div class="tags">
@@ -503,226 +349,250 @@ function renderSpots() {
       </div>
 
       <div class="voteRow">
-        <button class="voteBtn ${alreadyVoted ? "disabled":""}" data-id="${s.id}" data-v="truth" ${alreadyVoted?"disabled":""}>👍 সত্যি ${Number(s.truth||0)}</button>
-        <button class="voteBtn ${alreadyVoted ? "disabled":""}" data-id="${s.id}" data-v="fake" ${alreadyVoted?"disabled":""}>👎 ভুয়া ${Number(s.fake||0)}</button>
-        <button class="voteBtn" data-id="${s.id}" data-v="center">📍 Map</button>
+        <button class="voteBtn" data-act="vote" data-id="${s.id}" data-v="truth">👍 সত্যি ${Number(s.truthCount||0)}</button>
+        <button class="voteBtn" data-act="vote" data-id="${s.id}" data-v="fake">👎 ভুয়া ${Number(s.fakeCount||0)}</button>
+        <button class="voteBtn" data-act="report" data-id="${s.id}">🚩 রিপোর্ট ${Number(s.reportsCount||0)}</button>
+        <button class="voteBtn" data-act="center" data-id="${s.id}">📍 Map</button>
+        <button class="voteBtn" data-act="share" data-id="${s.id}">📤 Share</button>
       </div>
+
+      <div class="cardSub" id="msg_${s.id}"></div>
     `;
     listEl.appendChild(card);
   });
 
-  totalPill.textContent = `🌙 আজকের স্পট: ${rajshahiSpots.length}টি`;
-  verifiedPill.textContent = `✓ নিশ্চিত: ${rajshahiSpots.length}টি`;
+  totalPill.textContent = `🌙 লাইভ স্পট: ${approvedCache.length}টি`;
 }
 
-/**
- * Vote once per device:
- * - আমরা batch write করি:
- *   1) votes/{spotId_deviceId} create (একবারই create সম্ভব; rules এ block)
- *   2) spots/{spotId} update increment
- */
+/** Vote/Report/Center/Share handlers */
 listEl.addEventListener("click", async (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
 
-  const spotId = btn.dataset.id;
-  const act = btn.dataset.v;
-  if (!spotId || !act) return;
+  const id = btn.dataset.id;
+  const act = btn.dataset.act;
+  if (!id || !act) return;
 
-  const spot = spotsCache.find(s => s.id === spotId);
+  const spot = approvedCache.find(x => x.id === id);
   if (!spot) return;
+
+  if (!UID) return alert("অপেক্ষা করুন… UID তৈরি হচ্ছে।");
 
   if (act === "center") {
     map.setView([spot.lat, spot.lng], 17);
     return;
   }
 
-  const votedKey = `voted_${spotId}`;
-  if (localStorage.getItem(votedKey) === "1") {
-    alert("✅ আপনি এই স্পটে আগে vote দিয়েছেন।");
+  if (act === "share") {
+    await shareSpot(spot);
     return;
   }
 
-  const voteDocId = `${spotId}_${deviceId}`;
-  const voteRef = doc(db, "votes", voteDocId);
-  const spotRef = doc(db, "spots", spotId);
+  if (act === "vote") {
+    const v = btn.dataset.v; // truth|fake
+    await voteOnce(id, v);
+    return;
+  }
 
-  try {
-    const batch = writeBatch(db);
-
-    // create vote ticket
-    batch.set(voteRef, {
-      spotId,
-      deviceId,
-      vote: act, // truth|fake
-      createdAt: serverTimestamp()
-    });
-
-    // increment spot count
-    batch.update(spotRef, {
-      [act]: increment(1)
-    });
-
-    await batch.commit();
-
-    localStorage.setItem(votedKey, "1");
-  } catch (err) {
-    console.error(err);
-    alert("❌ Vote হয়নি (সম্ভবত আগে vote দেয়া আছে বা rules block করেছে)।");
+  if (act === "report") {
+    await reportOnce(id);
+    return;
   }
 });
 
+async function voteOnce(spotId, voteType){
+  const msgEl = document.getElementById(`msg_${spotId}`);
+  msgEl.textContent = "";
 
+  const voteId = `${spotId}_${UID}`;
+  const voteRef = doc(db,"votes",voteId);
+  const spotRef = doc(db,"spots_approved",spotId);
 
-async function initVisitorCounter() {
-  const cached = readVisitorCache();
-  if (cached) renderVisitorCounts(cached.total, cached.unique);
+  const existing = await getDoc(voteRef);
+  if (existing.exists()) {
+    msgEl.textContent = "✅ আপনি আগে vote দিয়েছেন।";
+    return;
+  }
 
-  try {
-    const counts = isBotVisitor()
-      ? await readVisitorCountsOnly()
-      : await registerVisitorHit();
+  const batch = writeBatch(db);
+  batch.set(voteRef, { spotId, uid: UID, voteType, createdAt: serverTimestamp() });
 
-    if (!counts) return;
-    renderVisitorCounts(counts.total, counts.unique);
-    writeVisitorCache(counts.total, counts.unique);
-  } catch (err) {
-    console.error("visitor counter error", err);
+  if (voteType === "truth") batch.update(spotRef, { truthCount: increment(1) });
+  if (voteType === "fake") batch.update(spotRef, { fakeCount: increment(1) });
+
+  try{
+    await batch.commit();
+    msgEl.textContent = "✅ Vote গ্রহণ করা হয়েছে।";
+  } catch (err){
+    console.error(err);
+    msgEl.textContent = "❌ Vote হয়নি (rules/নেট সমস্যা)।";
   }
 }
 
-function isBotVisitor() {
-  const ua = (navigator.userAgent || "").toLowerCase();
-  return /(bot|crawler|spider|crawling|slurp|headless)/i.test(ua);
+async function reportOnce(spotId){
+  const msgEl = document.getElementById(`msg_${spotId}`);
+  msgEl.textContent = "";
+
+  const reportId = `${spotId}_${UID}`;
+  const reportRef = doc(db,"reports",reportId);
+  const spotRef = doc(db,"spots_approved",spotId);
+
+  const existing = await getDoc(reportRef);
+  if (existing.exists()) {
+    msgEl.textContent = "✅ আপনি আগে রিপোর্ট করেছেন।";
+    return;
+  }
+
+  const batch = writeBatch(db);
+  batch.set(reportRef, { spotId, uid: UID, createdAt: serverTimestamp() });
+  batch.update(spotRef, { reportsCount: increment(1) });
+
+  try{
+    await batch.commit();
+    msgEl.textContent = "✅ রিপোর্ট পাঠানো হয়েছে।";
+  } catch (err){
+    console.error(err);
+    msgEl.textContent = "❌ রিপোর্ট পাঠানো যায়নি।";
+  }
 }
 
-async function registerVisitorHit() {
-  const uniqueId = getOrCreateVisitorId();
-  const uniqueRef = doc(db, VISITOR_UNIQUE_COLLECTION, uniqueId);
-  const now = Date.now();
+/** Share */
+async function shareSpot(spot){
+  const url = new URL(window.location.href);
+  url.searchParams.set("spot", spot.id);
 
-  return runTransaction(db, async (tx) => {
-    const [counterSnap, uniqueSnap] = await Promise.all([
-      tx.get(VISITOR_COUNTER_DOC),
-      tx.get(uniqueRef)
-    ]);
+  const text = `🌙 ইফতার স্পট: ${spot.name} (${spot.area})\nটাইপ: ${spot.type}\n`;
+  const shareData = { title: "ইফতার খুঁজুন — রাজশাহী", text, url: url.toString() };
 
-    let total = Number(counterSnap.exists() ? counterSnap.data().total || 0 : 0);
-    let unique = Number(counterSnap.exists() ? counterSnap.data().unique || 0 : 0);
-
-    const hasUniqueDoc = uniqueSnap.exists();
-    const uniqueData = hasUniqueDoc ? uniqueSnap.data() : {};
-    const lastHitAt = Number(uniqueData.lastHitAt || 0);
-    const tooFrequent = hasUniqueDoc && (now - lastHitAt) < VISITOR_HIT_GUARD_MS;
-
-    if (!tooFrequent) {
-      total += 1;
-      if (!hasUniqueDoc) unique += 1;
-
-      tx.set(VISITOR_COUNTER_DOC, {
-        total,
-        unique,
-        updatedAt: now
-      }, { merge: true });
+  try{
+    if (navigator.share) {
+      await navigator.share(shareData);
+    } else {
+      await navigator.clipboard.writeText(url.toString());
+      alert("✅ লিংক কপি হয়েছে!");
     }
-
-    tx.set(uniqueRef, {
-      firstSeenAt: hasUniqueDoc ? Number(uniqueData.firstSeenAt || now) : now,
-      lastHitAt: now,
-      hitCount: Number(uniqueData.hitCount || 0) + 1
-    }, { merge: true });
-
-    return { total, unique };
-  });
-}
-
-async function readVisitorCountsOnly() {
-  const cached = readVisitorCache();
-  if (cached) return cached;
-
-  const snap = await getDoc(VISITOR_COUNTER_DOC);
-  if (!snap.exists()) return { total: 0, unique: 0 };
-  return {
-    total: Number(snap.data().total || 0),
-    unique: Number(snap.data().unique || 0)
-  };
-}
-
-function renderVisitorCounts(total, unique) {
-  const text = `Visitors: ${Number(total || 0)} | Unique: ${Number(unique || 0)}`;
-  if (visitorsPill) visitorsPill.textContent = text;
-  if (visitorFooterCounts) visitorFooterCounts.textContent = text;
-}
-
-function readVisitorCache() {
-  try {
-    const raw = localStorage.getItem(VISITOR_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return null;
-    const now = Date.now();
-    if (now - Number(parsed.ts || 0) > 10 * 1000) return null;
-    return {
-      total: Number(parsed.total || 0),
-      unique: Number(parsed.unique || 0)
-    };
   } catch {
-    return null;
+    // ignore cancel
   }
 }
 
-function writeVisitorCache(total, unique) {
-  localStorage.setItem(VISITOR_CACHE_KEY, JSON.stringify({
-    total: Number(total || 0),
-    unique: Number(unique || 0),
-    ts: Date.now()
-  }));
-}
-
-function getOrCreateVisitorId() {
-  const key = "ifter_unique_visitor_id_v1";
-  let id = localStorage.getItem(key);
-  if (id) return id;
-  id = "visitor_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
-  localStorage.setItem(key, id);
-  return id;
-}
-
-/** Iftar countdown (Rajshahi) */
+/** Time-based UI + countdown */
 loadIftarCountdown();
 async function loadIftarCountdown() {
   try {
-    const url = `https://api.aladhan.com/v1/timingsByCity?city=Rajshahi&country=Bangladesh&method=2`;
-    const res = await fetch(url);
+    const res = await fetch("https://api.aladhan.com/v1/timingsByCity?city=Rajshahi&country=Bangladesh&method=2");
     const json = await res.json();
     const maghrib = json?.data?.timings?.Maghrib;
-    if (!maghrib) throw new Error("Maghrib not found");
+    if (!maghrib) throw new Error("Maghrib missing");
+
     startCountdown(maghrib);
   } catch {
     iftarCountdownEl.textContent = "⚠️ কাউন্টডাউন লোড হয়নি";
   }
 }
-function startCountdown(maghribHHMM) {
-  function tick() {
+
+function startCountdown(maghribHHMM){
+  function tick(){
     const now = new Date();
-    const [hh, mm] = maghribHHMM.split(":").map(Number);
+    const [hh,mm] = maghribHHMM.split(":").map(Number);
     const target = new Date(now);
-    target.setHours(hh, mm, 0, 0);
-    if (target <= now) target.setDate(target.getDate() + 1);
+    target.setHours(hh,mm,0,0);
 
-    const diff = target - now;
-    const h = Math.floor(diff / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
+    // if already passed today => countdown to next day
+    let diff = target - now;
+    if (diff <= 0) {
+      // “ইফতার শেষ হয়েছে” text window: next 30 minutes after maghrib
+      const endWindow = new Date(target);
+      endWindow.setMinutes(endWindow.getMinutes() + 30);
+      if (now <= endWindow) {
+        sheetTitleMain.textContent = "✅ আজকের ইফতার শুরু হয়েছে";
+      } else {
+        sheetTitleMain.textContent = "🌙 আজকের ইফতার শেষ হয়েছে";
+      }
+      // next day countdown
+      target.setDate(target.getDate() + 1);
+      diff = target - now;
+    } else {
+      sheetTitleMain.textContent = "আজকের সক্রিয় স্পট";
+    }
 
-    iftarCountdownEl.textContent =
-      `🌙 ইফতার (${maghribHHMM}) বাকি: ${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+    const h = Math.floor(diff/3600000);
+    const m = Math.floor((diff%3600000)/60000);
+    const s = Math.floor((diff%60000)/1000);
+
+    iftarCountdownEl.textContent = `🌙 ইফতার (${maghribHHMM}) বাকি: ${pad2(h)}:${pad2(m)}:${pad2(s)}`;
   }
   tick();
   setInterval(tick, 1000);
 }
 function pad2(n){ return String(n).padStart(2,"0"); }
 
+/** Visitor count (Total + Online) */
+const DEVICE_KEY = "ifter_device_id_v2";
+const VISIT_DAY_KEY = "ifter_visit_day_v2";
+const deviceId = getOrCreateDeviceId();
+
+initVisitors();
+async function initVisitors(){
+  // total visits (once per day per device)
+  try{
+    const statsRef = doc(db,"stats","global");
+    const dayKey = new Date().toISOString().slice(0,10);
+    const last = localStorage.getItem(VISIT_DAY_KEY);
+
+    if (last !== dayKey) {
+      await setDoc(statsRef, { totalVisits: increment(1), updatedAt: serverTimestamp() }, { merge:true });
+      localStorage.setItem(VISIT_DAY_KEY, dayKey);
+    }
+
+    onSnapshot(statsRef, (snap)=>{
+      const d = snap.data() || {};
+      totalVisitsEl.textContent = `👁️ Visits: ${Number(d.totalVisits || 0)}`;
+    });
+
+    // presence heartbeat
+    const presRef = doc(db,"presence", deviceId);
+    await setDoc(presRef, { uid: UID || null, deviceId, lastSeen: serverTimestamp() }, { merge:true });
+
+    setInterval(async ()=>{
+      try { await setDoc(presRef, { uid: UID || null, lastSeen: serverTimestamp() }, { merge:true }); } catch {}
+    }, 25000);
+
+    onSnapshot(collection(db,"presence"), (snap)=>{
+      const now = Date.now();
+      let online = 0;
+      snap.forEach(d=>{
+        const ms = d.data()?.lastSeen?.toMillis ? d.data().lastSeen.toMillis() : 0;
+        if (ms && now - ms <= 2*60*1000) online++;
+      });
+      onlineNowEl.textContent = `🟢 Online: ${online}`;
+    });
+
+  }catch(err){
+    console.error(err);
+    totalVisitsEl.textContent = "👁️ Visits: -";
+    onlineNowEl.textContent = "🟢 Online: -";
+  }
+}
+
+/** URL param: ?spot=ID => auto center */
+autoCenterFromURL();
+async function autoCenterFromURL(){
+  const params = new URLSearchParams(window.location.search);
+  const spotId = params.get("spot");
+  if (!spotId) return;
+
+  const snap = await getDoc(doc(db,"spots_approved", spotId));
+  if (!snap.exists()) return;
+  const s = snap.data();
+  map.setView([s.lat, s.lng], 17);
+}
+
+/** Helpers */
+function formatDistance(m){
+  if (m < 1000) return `📍 ${Math.round(m)}m দূরে`;
+  return `📍 ${(m/1000).toFixed(1)}km দূরে`;
+}
 function escapeHtml(str) {
   return String(str || "")
     .replaceAll("&", "&amp;")
@@ -731,12 +601,9 @@ function escapeHtml(str) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
-
-function getOrCreateDeviceId() {
+function getOrCreateDeviceId(){
   let id = localStorage.getItem(DEVICE_KEY);
   if (id) return id;
-
-  // simple random ID (soft device fingerprint)
   id = "dev_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
   localStorage.setItem(DEVICE_KEY, id);
   return id;
