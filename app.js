@@ -1,24 +1,30 @@
-// ===================== Firebase (Module) =====================
+// ================= Firebase (Module) =================
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
 import {
   getFirestore,
   collection,
-  doc,
   addDoc,
-  setDoc,
-  getDoc,
   onSnapshot,
   query,
   orderBy,
-  serverTimestamp
+  serverTimestamp,
+  doc,
+  getDoc,
+  setDoc,
+  writeBatch,
+  increment,
+  where,
+  getDocs,
+  limit
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
 import {
   getAuth,
   signInAnonymously,
   onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
-// ===================== Firebase Config =====================
+// ================= Firebase Config =================
 const firebaseConfig = {
   apiKey: "AIzaSyA6SZeKVmNAsd4eAlieCTC7zQzYMenwJEA",
   authDomain: "free-ifter.firebaseapp.com",
@@ -33,95 +39,305 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// ===================== Constants =====================
-// RU center + bounds (approx RU + Kazla area)
-const RU_CENTER = [24.3636, 88.6241];
-const RU_BOUNDS = L.latLngBounds(
-  L.latLng(24.345, 88.595),
-  L.latLng(24.385, 88.655)
-);
+// ================= Anonymous Auth =================
+let UID = null;
 
-// Collections
-const COL_PENDING = "spots_pending";
-const COL_APPROVED = "spots_approved";
-const COL_VOTES = "votes";
-const COL_PRESENCE = "presence";
+// robust authReady (Safari stuck fix)
+const authReady = (async () => {
+  try {
+    if (!auth.currentUser) await signInAnonymously(auth);
+    return auth.currentUser;
+  } catch (e) {
+    console.error("AUTH ERROR:", e);
+    alert("❌ Firebase Auth সমস্যা। Anonymous ON + Authorized domains চেক করুন।");
+    throw e;
+  }
+})();
 
-// ===================== DOM =====================
-const listWrap = document.getElementById("listWrap");
-const liveCountEl = document.getElementById("liveCount");
-const pendingCountEl = document.getElementById("pendingCount");
-const clockText = document.getElementById("clockText");
+onAuthStateChanged(auth, (u) => { if (u) UID = u.uid; });
+
+// ================= Location: Rajshahi =================
+const RAJSHAHI = [24.3745, 88.6042];
+
+// Rajshahi city bounds (strict)
+function insideRajshahi(lat, lng) {
+  return lat >= 24.33 && lat <= 24.42 && lng >= 88.56 && lng <= 88.70;
+}
+
+// ================= Foods =================
+function foodsByType(type) {
+  if (type === "মিক্স ইফতার") return ["বেগুনি", "ছোলা", "পেঁয়াজু", "হালিম", "শরবত"];
+  if (type === "খিচুড়ি") return ["খিচুড়ি"];
+  if (type === "বিরিয়ানি") return ["বিরিয়ানি"];
+  return [];
+}
+
+// ================= UI Refs =================
+const listEl = document.getElementById("list");
+const totalPill = document.getElementById("totalPill");
+const pendingPill = document.getElementById("pendingPill");
+const iftarCountdownEl = document.getElementById("iftarCountdown");
+const sheetTitleMain = document.getElementById("sheetTitleMain");
 
 const searchInput = document.getElementById("searchInput");
+const chipsRow = document.getElementById("chipsRow");
+const centerBtn = document.getElementById("centerBtn");
 const gpsBtn = document.getElementById("gpsBtn");
 
-const visitCount = document.getElementById("visitCount");
-const onlineCount = document.getElementById("onlineCount");
+const totalVisitsEl = document.getElementById("totalVisits");
+const onlineNowEl = document.getElementById("onlineNow");
 
-// Add modal controls
-const openAddBtn = document.getElementById("openAddBtn");
-const addModal = document.getElementById("addModal");
-const closeAddBtn = document.getElementById("closeAddBtn");
-const addFormMount = document.getElementById("addFormMount");
+// Modal
+const addSpotBtn = document.getElementById("addSpotBtn");
+const modal = document.getElementById("modal");
+const modalBackdrop = document.getElementById("modalBackdrop");
+const closeModalBtn = document.getElementById("closeModalBtn");
+const pickOnMapBtn = document.getElementById("pickOnMapBtn");
 
-// Sort dropdown (custom)
-const sortDD = document.getElementById("sortDD");
-const sortBtn = document.getElementById("sortBtn");
-const sortMenu = document.getElementById("sortMenu");
-const sortLabel = document.getElementById("sortLabel");
+const spotForm = document.getElementById("spotForm");
+const spotName = document.getElementById("spotName");
+const spotArea = document.getElementById("spotArea");
+const foodType = document.getElementById("foodType");
+const foodInfo = document.getElementById("foodInfo");
+const latlngPill = document.getElementById("latlngPill");
 
-// Filter chips
-const chipEls = Array.from(document.querySelectorAll(".chip"));
+// Bottom Sheet Drag
+const sheet = document.getElementById("sheet");
+const handle = document.getElementById("sheetHandle");
 
-// ===================== State =====================
-let UID = null;
-let myPos = null; // {lat,lng}
-let filter = "all";
-let sortMode = "latest"; // latest | truth | distance
-let approvedCache = []; // [{id,...}]
-let markers = [];
-let pickedLatLng = null;
-
-// ===================== Map =====================
+// ================= Map =================
 const map = L.map("map", {
-  zoomControl: false,
-  scrollWheelZoom: true
-}).setView(RU_CENTER, 14);
+  zoomControl: true,
+  scrollWheelZoom: false,
+  doubleClickZoom: false,
+  tap: true
+}).setView(RAJSHAHI, 14);
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 19
-}).addTo(map);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
 
-// limit to RU area visually (optional) - comment out if you don't want a rectangle
-// L.rectangle(RU_BOUNDS, { color: "#16a34a", weight: 1, fillOpacity: 0.05 }).addTo(map);
+const cluster = L.markerClusterGroup();
+map.addLayer(cluster);
 
-function clearMarkers() {
-  for (const m of markers) map.removeLayer(m);
-  markers = [];
+// ================= Bottom Sheet Drag =================
+const SHEET_MIN = 28; // vh
+const SHEET_MAX = 82; // vh
+let dragging = false;
+let startY = 0;
+let startH = 40;
+
+function setSheetVh(vh) {
+  const clamped = Math.max(SHEET_MIN, Math.min(SHEET_MAX, vh));
+  sheet.style.height = clamped + "dvh";
 }
 
-function addMarker(lat, lng, html) {
-  const m = L.marker([lat, lng]).addTo(map);
-  if (html) m.bindPopup(html);
-  markers.push(m);
+function pointerDown(y) {
+  dragging = true;
+  startY = y;
+  startH = (parseFloat(getComputedStyle(sheet).height) / window.innerHeight) * 100;
+  handle.style.cursor = "grabbing";
 }
 
-// pick location from map
-map.on("click", (e) => {
-  pickedLatLng = e.latlng;
-  // if modal is open, update fields
-  const latEl = document.getElementById("spotLat");
-  const lngEl = document.getElementById("spotLng");
-  if (latEl && lngEl) {
-    latEl.value = pickedLatLng.lat.toFixed(5);
-    lngEl.value = pickedLatLng.lng.toFixed(5);
+function pointerMove(y) {
+  if (!dragging) return;
+  const dy = ((y - startY) / window.innerHeight) * 100;
+  setSheetVh(startH - dy);
+}
+
+function pointerUp() {
+  dragging = false;
+  handle.style.cursor = "grab";
+}
+
+handle.addEventListener("touchstart", (e) => pointerDown(e.touches[0].clientY), { passive: true });
+window.addEventListener("touchmove", (e) => pointerMove(e.touches[0].clientY), { passive: true });
+window.addEventListener("touchend", pointerUp);
+
+handle.addEventListener("mousedown", (e) => { e.preventDefault(); pointerDown(e.clientY); });
+window.addEventListener("mousemove", (e) => pointerMove(e.clientY));
+window.addEventListener("mouseup", pointerUp);
+
+// ================= Modal show/hide =================
+function openModal() { modal.hidden = false; modalBackdrop.hidden = false; }
+function closeModal() { modal.hidden = true; modalBackdrop.hidden = true; }
+
+addSpotBtn.addEventListener("click", openModal);
+closeModalBtn.addEventListener("click", closeModal);
+modalBackdrop.addEventListener("click", closeModal);
+
+foodType.addEventListener("change", () => {
+  const t = foodType.value || "মিক্স ইফতার";
+  foodInfo.textContent = `${t} = ${foodsByType(t).join(", ")}`;
+});
+
+// ================= Pin Pick =================
+let picked = null;
+let pinMarker = null;
+let userLatLng = null;
+
+function updateLatLngPill() {
+  if (!picked) latlngPill.textContent = "📍 পিন সেট হয়নি (ম্যাপে ট্যাপ করুন)";
+  else latlngPill.textContent = `📍 ${picked.lat.toFixed(5)}, ${picked.lng.toFixed(5)}`;
+}
+
+function setPin(lat, lng) {
+  picked = { lat, lng };
+  updateLatLngPill();
+
+  if (pinMarker) pinMarker.setLatLng([lat, lng]);
+  else {
+    pinMarker = L.marker([lat, lng], { draggable: true }).addTo(map);
+    pinMarker.on("dragend", () => {
+      const ll = pinMarker.getLatLng();
+      picked = { lat: ll.lat, lng: ll.lng };
+      updateLatLngPill();
+    });
+  }
+}
+
+map.on("click", (e) => setPin(e.latlng.lat, e.latlng.lng));
+
+pickOnMapBtn.addEventListener("click", () => {
+  closeModal();
+  alert("✅ এখন ম্যাপে ক্লিক করে পিন সেট করুন, তারপর আবার + স্পট যোগ করুন।");
+});
+
+centerBtn.addEventListener("click", () => map.setView(RAJSHAHI, 14));
+
+// GPS
+gpsBtn.addEventListener("click", () => {
+  if (!navigator.geolocation) return alert("GPS সাপোর্ট নেই।");
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      userLatLng = L.latLng(pos.coords.latitude, pos.coords.longitude);
+      map.setView([userLatLng.lat, userLatLng.lng], 16);
+      setPin(userLatLng.lat, userLatLng.lng);
+    },
+    () => alert("GPS permission পাওয়া যায়নি।")
+  );
+});
+
+updateLatLngPill();
+
+// ================= Duplicate Detector =================
+const DUP_RADIUS_M = 150;
+
+function normalizeName(s) {
+  return String(s || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function haversineM(aLat, aLng, bLat, bLng) {
+  const R = 6371000;
+  const toRad = (x) => x * Math.PI / 180;
+  const dLat = toRad(bLat - aLat);
+  const dLng = toRad(bLng - aLng);
+  const sa =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) *
+    Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(sa));
+}
+
+async function isDuplicate(nameLower, lat, lng) {
+  const q1 = query(collection(db, "spots_approved"), where("nameLower", "==", nameLower), limit(20));
+  const q2 = query(collection(db, "spots_pending"), where("nameLower", "==", nameLower), limit(20));
+  const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+
+  for (const snap of [s1, s2]) {
+    for (const d of snap.docs) {
+      const s = d.data();
+      const dist = haversineM(lat, lng, s.lat, s.lng);
+      if (dist <= DUP_RADIUS_M) return true;
+    }
+  }
+  return false;
+}
+
+// ================= Submit Pending =================
+spotForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const u = await authReady;
+    UID = u.uid;
+
+    const name = spotName.value.trim();
+    const area = spotArea.value.trim();
+    const type = foodType.value;
+
+    if (!name || name.length < 3) return alert("নাম কমপক্ষে ৩ অক্ষর দিন");
+    if (!area || area.length < 2) return alert("এলাকা কমপক্ষে ২ অক্ষর দিন");
+    if (!type) return alert("টাইপ নির্বাচন করুন");
+    if (!picked) return alert("ম্যাপে ট্যাপ করে পিন সেট করুন");
+
+    const { lat, lng } = picked;
+
+    if (!insideRajshahi(lat, lng)) return alert("রাজশাহী এলাকার বাইরে!");
+
+    const nameLower = normalizeName(name);
+
+    if (await isDuplicate(nameLower, lat, lng)) {
+      return alert("⚠️ ডুপ্লিকেট মনে হচ্ছে (একই নাম + কাছাকাছি)");
+    }
+
+    await addDoc(collection(db, "spots_pending"), {
+      name,
+      nameLower,
+      area,
+      type,
+      foods: foodsByType(type),
+      lat,
+      lng,
+      createdBy: UID,
+      createdAt: serverTimestamp(),
+      status: "pending"
+    });
+
+    alert("✅ Pending জমা হয়েছে! Admin approve করলে লাইভ হবে।");
+
+    spotForm.reset();
+    picked = null;
+    updateLatLngPill();
+    if (pinMarker) { map.removeLayer(pinMarker); pinMarker = null; }
+    closeModal();
+
+  } catch (err) {
+    console.error("SUBMIT ERROR:", err);
+    alert("❌ Submit failed: " + (err?.message || "Unknown error"));
   }
 });
 
-// ===================== Utils =====================
-function esc(s) {
-  return String(s ?? "")
+// ================= Search + Filter =================
+let filter = "all";
+
+chipsRow.addEventListener("click", (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+
+  [...chipsRow.querySelectorAll(".chip")].forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  filter = btn.dataset.filter || "all";
+  render();
+});
+
+searchInput.addEventListener("input", render);
+
+// ================= Firestore Live Data =================
+let approvedCache = [];
+
+// Approved
+onSnapshot(query(collection(db, "spots_approved"), orderBy("createdAt", "desc")), (snap) => {
+  approvedCache = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  render();
+});
+
+// Pending count
+onSnapshot(collection(db, "spots_pending"), (snap) => {
+  pendingPill.textContent = `⏳ Pending: ${snap.size}টি`;
+});
+
+// ================= Render (Cards + Markers) =================
+function escapeHtml(str) {
+  return String(str || "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -129,455 +345,252 @@ function esc(s) {
     .replaceAll("'", "&#039;");
 }
 
-function typeLabel(t) {
-  if (t === "mix") return "মিক্স ইফতার";
-  if (t === "khichuri") return "খিচুড়ি";
-  if (t === "biriyani") return "বিরিয়ানি";
-  return "ইফতার";
+function formatDistance(m) {
+  if (m < 1000) return `${Math.round(m)}m দূরে`;
+  return `${(m / 1000).toFixed(1)}km দূরে`;
 }
 
-function foodsForType(t) {
-  if (t === "mix") return ["বেগুনি", "ছোলা", "পেঁয়াজু", "হালিম", "শরবত"];
-  if (t === "khichuri") return ["খিচুড়ি"];
-  if (t === "biriyani") return ["বিরিয়ানি"];
-  return [];
+function render() {
+  cluster.clearLayers();
+  listEl.innerHTML = "";
+
+  const qtxt = (searchInput.value || "").trim().toLowerCase();
+  let filtered = approvedCache;
+
+  if (filter !== "all") {
+    if (filter === "truthy") filtered = filtered.filter(s => Number(s.truthCount || 0) > Number(s.fakeCount || 0));
+    else filtered = filtered.filter(s => (s.type || "") === filter);
+  }
+
+  if (qtxt) {
+    filtered = filtered.filter(s =>
+      (s.name || "").toLowerCase().includes(qtxt) ||
+      (s.area || "").toLowerCase().includes(qtxt) ||
+      (s.type || "").toLowerCase().includes(qtxt)
+    );
+  }
+
+  filtered.forEach((s) => {
+    cluster.addLayer(
+      L.marker([s.lat, s.lng]).bindPopup(`<b>${escapeHtml(s.name)}</b><br>${escapeHtml(s.area)}<br>${escapeHtml(s.type)}`)
+    );
+
+    const distText = userLatLng ? formatDistance(userLatLng.distanceTo(L.latLng(s.lat, s.lng))) : "";
+    const foods = Array.isArray(s.foods) ? s.foods : [];
+
+    const card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML = `
+      <div class="cardTitle">${escapeHtml(s.name)}</div>
+      <div class="cardSub">📍 ${escapeHtml(s.area)} • ${escapeHtml(s.type)} ${distText ? "• "+distText : ""}</div>
+      <div class="tags">${foods.map(f => `<span class="tag">${escapeHtml(f)}</span>`).join("")}</div>
+
+      <div class="voteRow">
+        <button class="voteBtn" data-act="vote" data-id="${s.id}" data-v="truth">👍 সত্যি ${Number(s.truthCount||0)}</button>
+        <button class="voteBtn" data-act="vote" data-id="${s.id}" data-v="fake">👎 ভুয়া ${Number(s.fakeCount||0)}</button>
+        <button class="voteBtn" data-act="report" data-id="${s.id}">🚩 রিপোর্ট ${Number(s.reportsCount||0)}</button>
+        <button class="voteBtn" data-act="center" data-id="${s.id}">📍 Map</button>
+        <button class="voteBtn" data-act="share" data-id="${s.id}">📤 Share</button>
+      </div>
+
+      <div class="cardSub" id="msg_${s.id}"></div>
+    `;
+
+    listEl.appendChild(card);
+  });
+
+  totalPill.textContent = `🌙 লাইভ স্পট: ${approvedCache.length}টি`;
 }
 
-function distanceKm(a, b) {
-  const R = 6371;
-  const dLat = (b.lat - a.lat) * Math.PI / 180;
-  const dLng = (b.lng - a.lng) * Math.PI / 180;
-  const sa = Math.sin(dLat/2)**2 +
-    Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180) *
-    Math.sin(dLng/2)**2;
-  return 2 * R * Math.asin(Math.sqrt(sa));
+// ================= Vote / Report / Share / Center =================
+listEl.addEventListener("click", async (e) => {
+  const btn = e.target.closest("button");
+  if (!btn) return;
+
+  const id = btn.dataset.id;
+  const act = btn.dataset.act;
+
+  if (!id || !act) return;
+
+  const u = await authReady;
+  UID = u.uid;
+
+  const spot = approvedCache.find(x => x.id === id);
+  if (!spot) return;
+
+  if (act === "center") return map.setView([spot.lat, spot.lng], 17);
+  if (act === "share") return shareSpot(spot);
+  if (act === "vote") return voteOnce(id, btn.dataset.v);
+  if (act === "report") return reportOnce(id);
+});
+
+async function voteOnce(spotId, voteType) {
+  const msgEl = document.getElementById(`msg_${spotId}`);
+  msgEl.textContent = "";
+
+  const voteId = `${spotId}_${UID}`;
+  const voteRef = doc(db, "votes", voteId);
+  const spotRef = doc(db, "spots_approved", spotId);
+
+  if ((await getDoc(voteRef)).exists()) {
+    msgEl.textContent = "✅ আপনি আগে vote দিয়েছেন।";
+    return;
+  }
+
+  const batch = writeBatch(db);
+  batch.set(voteRef, { spotId, uid: UID, voteType, createdAt: serverTimestamp() });
+  batch.update(spotRef, voteType === "truth" ? { truthCount: increment(1) } : { fakeCount: increment(1) });
+
+  try { await batch.commit(); msgEl.textContent = "✅ Vote নেওয়া হয়েছে।"; }
+  catch { msgEl.textContent = "❌ Vote হয়নি (Rules/Net)।"; }
 }
 
-// device id
-const DEVICE_KEY = "ifter_device_id_v4";
-function getDeviceId() {
+async function reportOnce(spotId) {
+  const msgEl = document.getElementById(`msg_${spotId}`);
+  msgEl.textContent = "";
+
+  const reportId = `${spotId}_${UID}`;
+  const reportRef = doc(db, "reports", reportId);
+  const spotRef = doc(db, "spots_approved", spotId);
+
+  if ((await getDoc(reportRef)).exists()) {
+    msgEl.textContent = "✅ আপনি আগে রিপোর্ট করেছেন।";
+    return;
+  }
+
+  const batch = writeBatch(db);
+  batch.set(reportRef, { spotId, uid: UID, createdAt: serverTimestamp() });
+  batch.update(spotRef, { reportsCount: increment(1) });
+
+  try { await batch.commit(); msgEl.textContent = "✅ রিপোর্ট পাঠানো হয়েছে।"; }
+  catch { msgEl.textContent = "❌ রিপোর্ট যায়নি (Rules/Net)।"; }
+}
+
+async function shareSpot(spot) {
+  const url = new URL(window.location.href);
+  url.searchParams.set("spot", spot.id);
+
+  const text = `🌙 ইফতার স্পট: ${spot.name} (${spot.area})\nটাইপ: ${spot.type}`;
+
+  try {
+    if (navigator.share) await navigator.share({ title: "ইফতার খুঁজুন", text, url: url.toString() });
+    else { await navigator.clipboard.writeText(url.toString()); alert("✅ লিংক কপি হয়েছে!"); }
+  } catch {}
+}
+
+// ================= Countdown (Rajshahi Maghrib) =================
+loadIftarCountdown();
+
+async function loadIftarCountdown() {
+  try {
+    const res = await fetch("https://api.aladhan.com/v1/timingsByCity?city=Rajshahi&country=Bangladesh&method=2");
+    const json = await res.json();
+    const maghrib = json?.data?.timings?.Maghrib;
+    startCountdown(maghrib);
+  } catch {
+    iftarCountdownEl.textContent = "⚠️ কাউন্টডাউন লোড হয়নি";
+  }
+}
+
+function startCountdown(maghribHHMM) {
+  function pad2(n) { return String(n).padStart(2, "0"); }
+
+  function tick() {
+    const now = new Date();
+    const [hh, mm] = maghribHHMM.split(":").map(Number);
+    const target = new Date(now);
+    target.setHours(hh, mm, 0, 0);
+
+    let diff = target - now;
+
+    if (diff <= 0) {
+      sheetTitleMain.textContent = "🌙 আজকের ইফতার শেষ / চলছে";
+      target.setDate(target.getDate() + 1);
+      diff = target - now;
+    } else {
+      sheetTitleMain.textContent = "আজকের সক্রিয় স্পট";
+    }
+
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+
+    iftarCountdownEl.textContent = `🌙 ইফতার (${maghribHHMM}) বাকি: ${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+  }
+
+  tick();
+  setInterval(tick, 1000);
+}
+
+// ================= Visitor Count + Online Now =================
+const DEVICE_KEY = "ifter_device_id_v3";
+const VISIT_DAY_KEY = "ifter_visit_day_v3";
+
+function getOrCreateDeviceId() {
   let id = localStorage.getItem(DEVICE_KEY);
   if (id) return id;
   id = "dev_" + Math.random().toString(16).slice(2) + "_" + Date.now().toString(16);
   localStorage.setItem(DEVICE_KEY, id);
   return id;
 }
-const deviceId = getDeviceId();
+const deviceId = getOrCreateDeviceId();
 
-// ===================== Modal open/close =====================
-function openAdd() {
-  addModal?.classList.remove("hidden");
-}
-function closeAdd() {
-  addModal?.classList.add("hidden");
-}
-openAddBtn?.addEventListener("click", openAdd);
-closeAddBtn?.addEventListener("click", closeAdd);
-addModal?.addEventListener("click", (e) => { if (e.target === addModal) closeAdd(); });
+initVisitors();
 
-// ===================== Inject Add Form =====================
-function injectAddForm() {
-  if (!addFormMount) return;
+async function initVisitors() {
+  try {
+    const statsRef = doc(db, "stats", "global");
+    const dayKey = new Date().toISOString().slice(0, 10);
+    const last = localStorage.getItem(VISIT_DAY_KEY);
 
-  addFormMount.innerHTML = `
-    <form id="spotForm">
-      <label>স্পট/মসজিদের নাম *</label>
-      <input id="spotName" required placeholder="যেমন: RU কেন্দ্রীয় মসজিদ"/>
+    if (last !== dayKey) {
+      await setDoc(statsRef, { totalVisits: increment(1), updatedAt: serverTimestamp() }, { merge: true });
+      localStorage.setItem(VISIT_DAY_KEY, dayKey);
+    }
 
-      <label>এলাকা/পয়েন্ট *</label>
-      <input id="spotArea" required placeholder="যেমন: কাজলা / RU"/>
+    onSnapshot(statsRef, (snap) => {
+      const d = snap.data() || {};
+      totalVisitsEl.textContent = `👁️ Visits: ${Number(d.totalVisits || 0)}`;
+    });
 
-      <label>ইফতারের ধরন *</label>
-      <select id="spotType" required>
-        <option value="mix">মিক্স ইফতার (বেগুনি, ছোলা, পেঁয়াজু, হালিম, শরবত)</option>
-        <option value="khichuri">খিচুড়ি</option>
-        <option value="biriyani">বিরিয়ানি</option>
-      </select>
+    const presRef = doc(db, "presence", deviceId);
+    await setDoc(presRef, { uid: UID || null, deviceId, lastSeen: serverTimestamp() }, { merge: true });
 
-      <div class="row">
-        <div>
-          <label>lat *</label>
-          <input id="spotLat" placeholder="ম্যাপে ক্লিক করুন" readonly />
-        </div>
-        <div>
-          <label>lng *</label>
-          <input id="spotLng" placeholder="ম্যাপে ক্লিক করুন" readonly />
-        </div>
-      </div>
+    setInterval(async () => {
+      try {
+        await setDoc(presRef, { uid: UID || null, lastSeen: serverTimestamp() }, { merge: true });
+      } catch {}
+    }, 25000);
 
-      <div class="hint">✅ ম্যাপে ক্লিক করলে lat/lng বসবে। RU bounds এর বাইরে হলে ব্লক হবে।</div>
+    onSnapshot(collection(db, "presence"), (snap) => {
+      const now = Date.now();
+      let online = 0;
 
-      <button class="btn-primary" id="spotSubmitBtn" type="submit">Submit (Pending)</button>
-      <div class="hint" id="spotMsg"></div>
-    </form>
-  `;
-
-  const form = document.getElementById("spotForm");
-  const spotType = document.getElementById("spotType");
-  const msg = document.getElementById("spotMsg");
-
-  // show foods info on change
-  spotType.addEventListener("change", () => {
-    const foods = foodsForType(spotType.value);
-    msg.textContent = foods.length ? `এই টাইপে: ${foods.join(", ")}` : "";
-  });
-
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    msg.textContent = "";
-
-    const btn = document.getElementById("spotSubmitBtn");
-    btn.disabled = true;
-    btn.textContent = "Submitting…";
-
-    try {
-      const name = document.getElementById("spotName").value.trim();
-      const area = document.getElementById("spotArea").value.trim();
-      const type = document.getElementById("spotType").value;
-
-      const lat = Number(document.getElementById("spotLat").value);
-      const lng = Number(document.getElementById("spotLng").value);
-
-      if (!name || name.length < 3) throw new Error("নাম কমপক্ষে ৩ অক্ষর দিন");
-      if (!area || area.length < 2) throw new Error("এলাকা কমপক্ষে ২ অক্ষর দিন");
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error("ম্যাপে ক্লিক করে লোকেশন সেট করুন");
-
-      const ll = L.latLng(lat, lng);
-      if (!RU_BOUNDS.contains(ll)) throw new Error("শুধু RU/রাজশাহী বিশ্ববিদ্যালয় কেন্দ্রিক লোকেশন দিন (bounds এর বাইরে)");
-
-      // write pending
-      await addDoc(collection(db, COL_PENDING), {
-        name,
-        area,
-        type,
-        foods: foodsForType(type),
-        lat,
-        lng,
-        status: "pending",
-        createdAt: serverTimestamp(),
-        createdAtMs: Date.now(),
-        uid: UID || null,
-        deviceId
+      snap.forEach(d => {
+        const ms = d.data()?.lastSeen?.toMillis ? d.data().lastSeen.toMillis() : 0;
+        if (ms && now - ms <= 2 * 60 * 1000) online++;
       });
 
-      msg.textContent = "✅ Pending জমা হয়েছে! Admin approve করলে লাইভ হবে।";
-      msg.style.color = "#166534";
-
-      // reset
-      form.reset();
-      pickedLatLng = null;
-
-      setTimeout(() => closeAdd(), 500);
-
-    } catch (err) {
-      console.error(err);
-      msg.textContent = "❌ " + (err?.message || "Submit failed");
-      msg.style.color = "#b91c1c";
-      alert(msg.textContent);
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "Submit (Pending)";
-    }
-  });
+      onlineNowEl.textContent = `🟢 Online: ${online}`;
+    });
+  } catch (err) {
+    console.error(err);
+    totalVisitsEl.textContent = "👁️ Visits: -";
+    onlineNowEl.textContent = "🟢 Online: -";
+  }
 }
-injectAddForm();
 
-// ===================== Filters =====================
-chipEls.forEach((c) => {
-  c.addEventListener("click", () => {
-    chipEls.forEach(x => x.classList.remove("active"));
-    c.classList.add("active");
-    filter = c.dataset.filter || "all";
-    render();
-  });
-});
-
-// Search
-searchInput?.addEventListener("input", render);
-
-// ===================== iOS-safe dropdown =====================
-function closeDD() { sortDD?.classList.remove("open"); }
-
-sortBtn?.addEventListener("click", (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  sortDD?.classList.toggle("open");
-});
-
-sortMenu?.addEventListener("click", (e) => {
-  const item = e.target.closest(".dd-item");
-  if (!item) return;
-  sortMode = item.dataset.sort || "latest";
-
-  if (sortMode === "latest") sortLabel.textContent = "সর্বশেষ";
-  if (sortMode === "truth") sortLabel.textContent = "সত্যি বেশি";
-  if (sortMode === "distance") sortLabel.textContent = "দূরত্ব (GPS)";
-
-  closeDD();
-  render();
-});
-
-document.addEventListener("click", closeDD);
-
-// ===================== GPS =====================
-gpsBtn?.addEventListener("click", () => {
-  if (!navigator.geolocation) return alert("GPS support নেই");
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      myPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      map.setView([myPos.lat, myPos.lng], 16);
-      alert("✅ GPS পাওয়া গেছে");
-      render();
-    },
-    () => alert("GPS permission দিন")
-  );
-});
-
-// ===================== Auth (Anonymous background) =====================
-signInAnonymously(auth).catch((e) => console.error("Anon auth:", e));
-
-onAuthStateChanged(auth, async (user) => {
-  if (!user) return;
-  UID = user.uid;
-
-  // presence heartbeat
+// ================= Auto Center if shared link (?spot=ID) =================
+(async function autoCenterFromURL() {
   try {
-    const presRef = doc(db, COL_PRESENCE, deviceId);
-    await setDoc(presRef, { uid: UID, deviceId, lastSeen: serverTimestamp() }, { merge: true });
-    setInterval(() => {
-      setDoc(presRef, { uid: UID, deviceId, lastSeen: serverTimestamp() }, { merge: true });
-    }, 25_000);
-  } catch (e) {
-    console.warn("Presence error:", e?.message || e);
-  }
-
-  // visitor count (per day per device)
-  try {
-    const day = new Date().toISOString().slice(0, 10);
-    const dayKey = "ifter_visit_day_v4";
-    const last = localStorage.getItem(dayKey);
-
-    if (last !== day) {
-      const statsRef = doc(db, "stats", "global");
-      const snap = await getDoc(statsRef);
-      const cur = snap.exists() ? Number(snap.data()?.totalVisits || 0) : 0;
-      await setDoc(statsRef, { totalVisits: cur + 1, updatedAt: serverTimestamp() }, { merge: true });
-      localStorage.setItem(dayKey, day);
-    }
-  } catch (e) {
-    console.warn("Visit error:", e?.message || e);
-  }
-});
-
-// stats live
-onSnapshot(doc(db, "stats", "global"), (snap) => {
-  visitCount.textContent = Number(snap.data()?.totalVisits || 0);
-});
-
-// online live
-onSnapshot(collection(db, COL_PRESENCE), (snap) => {
-  const now = Date.now();
-  let online = 0;
-  snap.forEach(d => {
-    const ms = d.data()?.lastSeen?.toMillis ? d.data().lastSeen.toMillis() : 0;
-    if (ms && (now - ms <= 2 * 60 * 1000)) online++;
-  });
-  onlineCount.textContent = online;
-});
-
-// pending count
-onSnapshot(collection(db, COL_PENDING), (snap) => {
-  pendingCountEl.textContent = snap.size;
-});
-
-// approved live
-onSnapshot(query(collection(db, COL_APPROVED), orderBy("createdAt", "desc")), (snap) => {
-  approvedCache = [];
-  snap.forEach(d => approvedCache.push({ id: d.id, ...d.data() }));
-  liveCountEl.textContent = approvedCache.length;
-
-  renderMarkers();
-  render();
-});
-
-// ===================== Render =====================
-function renderMarkers() {
-  clearMarkers();
-  approvedCache.forEach((s) => {
-    const lat = Number(s.lat);
-    const lng = Number(s.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
-
-    addMarker(
-      lat,
-      lng,
-      `<b>${esc(s.name)}</b><br>${esc(s.area)}<br>${esc(typeLabel(s.type))}`
-    );
-  });
-}
-
-function buildCard(s) {
-  const truth = Number(s.truthCount || 0);
-  const fake = Number(s.fakeCount || 0);
-
-  let distTxt = "";
-  if (sortMode === "distance" && myPos && Number.isFinite(Number(s.lat)) && Number.isFinite(Number(s.lng))) {
-    const km = distanceKm(myPos, { lat: Number(s.lat), lng: Number(s.lng) });
-    distTxt = ` • ${km.toFixed(2)} km`;
-  }
-
-  return `
-    <div class="spot-card" data-id="${esc(s.id)}">
-      <div class="spot-top">
-        <div class="spot-ico">🥣</div>
-        <div style="flex:1">
-          <div class="spot-name">${esc(s.name)}</div>
-          <div class="spot-meta">📍 ${esc(s.area)} • ${esc(typeLabel(s.type))}${distTxt}</div>
-        </div>
-        <div class="spot-type">${esc(typeLabel(s.type))}</div>
-      </div>
-
-      <div class="spot-badges">
-        <button class="badge like" data-act="truth">👍 সত্যি <b>${truth}</b></button>
-        <button class="badge fake" data-act="fake">👎 ভুয়া <b>${fake}</b></button>
-        <button class="badge" style="background:#e5e7eb;color:#111" data-act="share">🔗 Share</button>
-        <button class="badge" style="background:#dbeafe;color:#1e40af" data-act="map">📍 Map</button>
-      </div>
-    </div>
-  `;
-}
-
-function render() {
-  if (!listWrap) return;
-
-  const q = (searchInput?.value || "").trim().toLowerCase();
-  let items = approvedCache.slice();
-
-  // filter
-  if (filter === "mix") items = items.filter(x => x.type === "mix");
-  if (filter === "khichuri") items = items.filter(x => x.type === "khichuri");
-  if (filter === "biriyani") items = items.filter(x => x.type === "biriyani");
-  if (filter === "truth") items = items.sort((a,b)=>(Number(b.truthCount||0)-Number(a.truthCount||0)));
-
-  // search
-  if (q) {
-    items = items.filter(x =>
-      (x.name || "").toLowerCase().includes(q) ||
-      (x.area || "").toLowerCase().includes(q) ||
-      typeLabel(x.type).toLowerCase().includes(q)
-    );
-  }
-
-  // sort
-  if (sortMode === "latest") {
-    items = items.sort((a,b)=>(Number(b.createdAtMs||0)-Number(a.createdAtMs||0)));
-  }
-  if (sortMode === "truth") {
-    items = items.sort((a,b)=>(Number(b.truthCount||0)-Number(a.truthCount||0)));
-  }
-  if (sortMode === "distance" && myPos) {
-    items = items
-      .map(x => ({
-        ...x,
-        _d: (Number.isFinite(Number(x.lat)) && Number.isFinite(Number(x.lng)))
-          ? distanceKm(myPos, {lat:Number(x.lat), lng:Number(x.lng)})
-          : 999999
-      }))
-      .sort((a,b)=>a._d-b._d);
-  }
-
-  if (!items.length) {
-    listWrap.innerHTML = `<div class="empty">কোনো স্পট পাওয়া যায়নি</div>`;
-    return;
-  }
-
-  listWrap.innerHTML = items.map(buildCard).join("");
-}
-
-// ===================== Card actions (vote/share/map) =====================
-listWrap?.addEventListener("click", async (e) => {
-  const card = e.target.closest(".spot-card");
-  const btn = e.target.closest("button");
-  if (!card || !btn) return;
-
-  const id = card.dataset.id;
-  const act = btn.dataset.act;
-  const spot = approvedCache.find(x => x.id === id);
-  if (!spot) return;
-
-  if (act === "map") {
-    map.setView([Number(spot.lat), Number(spot.lng)], 17);
-    return;
-  }
-
-  if (act === "share") {
-    const url = new URL(location.href);
-    url.searchParams.set("spot", id);
-    const text = `🌙 ইফতার স্পট: ${spot.name} (${spot.area}) — ${typeLabel(spot.type)}`;
-
-    try {
-      if (navigator.share) await navigator.share({ title: "ইফতার খুঁজুন", text, url: url.toString() });
-      else {
-        await navigator.clipboard.writeText(url.toString());
-        alert("✅ Link copied");
-      }
-    } catch {}
-    return;
-  }
-
-  if (act === "truth" || act === "fake") {
-    await voteOnce(id, act);
-  }
-});
-
-async function voteOnce(spotId, voteType) {
-  const voteId = `${deviceId}_${spotId}`;
-  const voteRef = doc(db, COL_VOTES, voteId);
-  const already = await getDoc(voteRef);
-  if (already.exists()) return alert("✅ এই ডিভাইস থেকে আগেই ভোট দেয়া হয়েছে");
-
-  await setDoc(voteRef, {
-    spotId,
-    deviceId,
-    uid: UID || null,
-    voteType,
-    createdAt: serverTimestamp()
-  });
-
-  // naive count update (admin rules should allow merge updates)
-  const spotRef = doc(db, COL_APPROVED, spotId);
-  const snap = await getDoc(spotRef);
-  if (!snap.exists()) return;
-
-  const cur = snap.data();
-  const truth = Number(cur.truthCount || 0);
-  const fake = Number(cur.fakeCount || 0);
-
-  await setDoc(spotRef, {
-    truthCount: voteType === "truth" ? truth + 1 : truth,
-    fakeCount: voteType === "fake" ? fake + 1 : fake
-  }, { merge: true });
-
-  alert("✅ Vote counted");
-}
-
-// ===================== Clock (simple) =====================
-const fmt = new Intl.DateTimeFormat("bn-BD", { hour: "2-digit", minute: "2-digit" });
-setInterval(() => {
-  clockText.textContent = fmt.format(new Date());
-}, 1000);
-
-// ===================== Auto-center shared spot (?spot=ID) =====================
-(async function autoCenter() {
-  try {
-    const p = new URLSearchParams(location.search);
-    const spotId = p.get("spot");
+    const params = new URLSearchParams(window.location.search);
+    const spotId = params.get("spot");
     if (!spotId) return;
 
-    const snap = await getDoc(doc(db, COL_APPROVED, spotId));
+    const snap = await getDoc(doc(db, "spots_approved", spotId));
     if (!snap.exists()) return;
 
     const s = snap.data();
-    map.setView([Number(s.lat), Number(s.lng)], 17);
+    map.setView([s.lat, s.lng], 17);
   } catch {}
 })();
