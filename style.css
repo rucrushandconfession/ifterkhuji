@@ -1,5 +1,12 @@
 /* =========================
-   GLOBAL / RESET
+   FULL REPLACE: style.css
+   Rajshahi Iftar (Premium)
+   - Hind Siliguri
+   - Fixed map layout (no padding glitch)
+   - Smooth bottom sheet
+   - Floating add button
+   - Modal form
+   - Voting pills
 ========================= */
 
 :root{
@@ -17,40 +24,35 @@
   --radius-lg: 20px;
   --radius-md: 16px;
 
-  --shadow: 0 14px 30px rgba(2,6,23,0.12);
+  --shadow-sm: 0 6px 16px rgba(2,6,23,0.08);
+  --shadow-md: 0 14px 30px rgba(2,6,23,0.12);
 }
 
-*{
-  box-sizing: border-box;
-}
+*{ box-sizing: border-box; }
 
-html,body{
-  height: 100%;
-}
+html,body{ height:100%; }
 
 body{
-  margin: 0;
+  margin:0;
   font-family: "Hind Siliguri", system-ui, -apple-system, Segoe UI, Roboto, Arial;
   background: var(--bg);
   color: var(--text);
   -webkit-font-smoothing: antialiased;
+  overflow: hidden; /* map + sheet fixed layout */
 }
 
 /* =========================
    TOP BAR
 ========================= */
-
 .topbar{
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
+  left:0; right:0; top:0;
   z-index: 1200;
 
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
 
   padding: 12px;
 
@@ -68,17 +70,17 @@ body{
   border-radius: 18px;
 
   padding: 10px 14px;
-  box-shadow: 0 6px 16px rgba(2,6,23,0.08);
+  box-shadow: var(--shadow-sm);
 }
 
 .countdownPill{
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:2px;
 
   background: var(--green);
-  color: #fff;
+  color:#fff;
 
   border-radius: 18px;
   padding: 10px 14px;
@@ -88,30 +90,30 @@ body{
 .countdownPill .label{
   font-size: 12px;
   font-weight: 700;
-  opacity: 0.9;
+  opacity: .9;
 }
 
 .countdownPill .time{
   font-size: 16px;
   font-weight: 900;
-  letter-spacing: 0.3px;
+  letter-spacing: .2px;
 }
 
 /* =========================
-   MAP
+   MAP (FIXED - no padding)
 ========================= */
-
 #map{
   position: fixed;
-  inset: 0;
-  padding-top: 64px;
+  left: 0;
+  right: 0;
+  top: 64px;   /* reserve for topbar */
+  bottom: 0;
   z-index: 1;
 }
 
 /* =========================
    BOTTOM SHEET
 ========================= */
-
 .sheet{
   position: fixed;
   left: 10px;
@@ -119,16 +121,21 @@ body{
   bottom: 10px;
   z-index: 1300;
 
+  /* height controlled by JS; keep safe defaults */
+  height: 42vh;
+  max-height: 86vh;
+  min-height: 14vh;
+
   background: var(--green);
   color: #fff;
 
   border-radius: var(--radius-xl);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-md);
 
-  display: flex;
+  display:flex;
   flex-direction: column;
 
-  will-change: height, transform;
+  will-change: height;
 }
 
 .sheetHandle{
@@ -140,17 +147,19 @@ body{
 }
 
 .sheetHeader{
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
   gap: 10px;
-
   padding: 0 14px 10px;
 }
 
 .sheetTitle{
   font-weight: 900;
   font-size: 18px;
+  display:flex;
+  align-items:center;
+  gap: 10px;
 }
 
 .sheetMeta{
@@ -161,10 +170,7 @@ body{
   font-weight: 900;
 }
 
-/* =========================
-   LIST AREA
-========================= */
-
+/* list wrapper */
 .list{
   margin: 0 10px 12px;
   background: rgba(255,255,255,0.12);
@@ -172,7 +178,7 @@ body{
   border-radius: var(--radius-lg);
 
   padding: 10px;
-  overflow-y: auto;
+  overflow: auto;
   flex: 1;
 }
 
@@ -185,9 +191,8 @@ body{
 }
 
 /* =========================
-   CARD (SPOT)
+   SPOT CARD (Premium)
 ========================= */
-
 .card{
   background: #fff;
   color: #111827;
@@ -198,9 +203,9 @@ body{
 
   box-shadow: 0 8px 18px rgba(2,6,23,0.10);
 
-  display: flex;
+  display:flex;
   gap: 12px;
-  align-items: flex-start;
+  align-items:flex-start;
 }
 
 .icon{
@@ -209,12 +214,12 @@ body{
   border-radius: 16px;
   background: #f1f5f4;
 
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display:flex;
+  align-items:center;
+  justify-content:center;
 
   font-size: 22px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
 
 .main{
@@ -232,23 +237,22 @@ body{
   margin-top: 6px;
   font-size: 13px;
   font-weight: 700;
-  color: #64748b;
+  color: var(--muted);
 
-  display: flex;
+  display:flex;
   gap: 10px;
   flex-wrap: wrap;
 }
 
 /* =========================
-   VOTING SYSTEM (PREMIUM)
+   VOTING (Premium Pills)
 ========================= */
-
 .voteRow{
   margin-top: 10px;
-  display: flex;
+  display:flex;
   gap: 10px;
   flex-wrap: wrap;
-  align-items: center;
+  align-items:center;
 }
 
 .voteBtn{
@@ -264,14 +268,14 @@ body{
 
   font-family: "Hind Siliguri", system-ui, -apple-system, Segoe UI, Roboto, Arial;
 
-  display: inline-flex;
-  align-items: center;
+  display:inline-flex;
+  align-items:center;
   gap: 8px;
 
   box-shadow: 0 6px 14px rgba(2,6,23,0.10);
   transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
 
-  user-select: none;
+  user-select:none;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -300,32 +304,12 @@ body{
 }
 
 /* =========================
-   RESPONSIVE
+   FLOATING ADD BUTTON (➕)
 ========================= */
-
-@media (max-width: 420px){
-  .brand{
-    font-size: 16px;
-    padding: 9px 12px;
-  }
-
-  .countdownPill .time{
-    font-size: 15px;
-  }
-
-  .voteBtn{
-    padding: 9px 12px;
-    font-size: 13px;
-  }
-}
-/* =========================
-   ADD SPOT FLOATING BUTTON
-========================= */
-
 .addSpotBtn{
   position: fixed;
   right: 18px;
-  bottom: 110px; /* bottom sheet এর উপর থাকবে */
+  bottom: 120px; /* above bottom sheet */
   z-index: 1400;
 
   width: 56px;
@@ -342,9 +326,9 @@ body{
   font-weight: 900;
   font-family: "Hind Siliguri", system-ui;
 
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display:flex;
+  align-items:center;
+  justify-content:center;
 
   box-shadow: 0 10px 22px rgba(2,6,23,0.25);
   transition: transform 120ms ease, box-shadow 120ms ease;
@@ -354,25 +338,23 @@ body{
   transform: scale(0.95);
   box-shadow: 0 6px 14px rgba(2,6,23,0.25);
 }
-/* =========================
-   ADD SPOT MODAL
-========================= */
 
+/* =========================
+   ADD SPOT MODAL (Premium)
+========================= */
 .modal{
   position: fixed;
   inset: 0;
   z-index: 2000;
   background: rgba(2,6,23,0.45);
 
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display:flex;
+  align-items:center;
+  justify-content:center;
   padding: 14px;
 }
 
-.modal.hidden{
-  display: none;
-}
+.modal.hidden{ display:none; }
 
 .modalCard{
   width: 100%;
@@ -381,6 +363,7 @@ body{
   border-radius: 20px;
   overflow: hidden;
   box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+  position: relative;
 }
 
 .modalHeader{
@@ -403,16 +386,20 @@ body{
 
 .modalClose{
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 12px;
+  right: 12px;
+
   border: 0;
   background: rgba(255,255,255,0.18);
   color: #fff;
+
   width: 36px;
   height: 36px;
   border-radius: 12px;
+
   font-size: 18px;
   cursor: pointer;
+  font-weight: 900;
 }
 
 .modalBody{
@@ -420,7 +407,7 @@ body{
 }
 
 .modalBody label{
-  display: block;
+  display:block;
   font-weight: 800;
   margin-top: 12px;
 }
@@ -429,17 +416,25 @@ body{
   width: 100%;
   margin-top: 6px;
   padding: 12px;
+
   border-radius: 14px;
   border: 1px solid rgba(2,6,23,0.12);
+
   font-family: "Hind Siliguri", system-ui;
   font-weight: 700;
+  outline: none;
+}
+
+.modalBody input:focus{
+  border-color: rgba(39,81,48,0.35);
+  box-shadow: 0 0 0 4px rgba(39,81,48,0.12);
 }
 
 .pinRow{
   margin-top: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
   gap: 10px;
 }
 
@@ -452,21 +447,50 @@ body{
 .pinBtn{
   border: 0;
   background: #eef2f7;
+
   border-radius: 999px;
   padding: 8px 12px;
+
   font-weight: 900;
   cursor: pointer;
+  font-family: "Hind Siliguri", system-ui;
 }
 
 .submitBtn{
   margin-top: 18px;
   width: 100%;
+
   border: 0;
   border-radius: 16px;
   padding: 12px;
+
   background: #275130;
   color: #fff;
+
   font-weight: 900;
   font-size: 15px;
   cursor: pointer;
+
+  font-family: "Hind Siliguri", system-ui;
+}
+
+.submitBtn:active{
+  transform: scale(0.99);
+}
+
+/* =========================
+   RESPONSIVE
+========================= */
+@media (max-width: 420px){
+  .brand{
+    font-size: 16px;
+    padding: 9px 12px;
+  }
+  .countdownPill .time{
+    font-size: 15px;
+  }
+  .voteBtn{
+    padding: 9px 12px;
+    font-size: 13px;
+  }
 }
