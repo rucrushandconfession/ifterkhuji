@@ -286,3 +286,11 @@ function escapeHtml(str){
     .replaceAll('"',"&quot;")
     .replaceAll("'","&#039;");
 }
+// =============================
+// Add Spot Button Action
+// =============================
+const addSpotBtn = document.getElementById("addSpotBtn");
+
+addSpotBtn.addEventListener("click", () => {
+  alert("স্পট যোগ করার ফর্ম পরের ধাপে যুক্ত হবে 🙂");
+});
