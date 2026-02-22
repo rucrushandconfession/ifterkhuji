@@ -3,109 +3,55 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ইফতার খুঁজুন</title>
+  <title>রাজশাহী ইফতার</title>
 
-  <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+  <!-- Bangla Font: Hind Siliguri -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
 
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+
+  <!-- Your CSS -->
   <link rel="stylesheet" href="./style.css" />
 </head>
 
 <body>
-  <div class="topbar">
-    <button id="btnFind" class="pill pill-ghost"><span class="moon">🌙</span> ইফতার খুঁজুন</button>
 
-    <div class="search">
-      <span class="icon">🔎</span>
-      <input id="q" placeholder="মসজিদ/এলাকা/ট" />
+  <!-- Top Bar (Minimal) -->
+  <header class="topbar">
+    <div class="brand">🌙 রাজশাহী ইফতার</div>
+
+    <div class="countdownPill">
+      <span class="label">ইফতার বাকি</span>
+      <span id="countdown" class="time">--</span>
     </div>
+  </header>
 
-    <button id="btnGPS" class="pill pill-solid">📍 GPS</button>
-  </div>
-
-  <div class="chips">
-    <button class="chip active" data-filter="all">সব</button>
-    <button class="chip" data-filter="mix">মিক্স</button>
-    <button class="chip" data-filter="khichuri">খিচুড়ি</button>
-    <button class="chip" data-filter="biriyani">বিরিয়ানি</button>
-    <button class="chip" data-filter="truthy">সত্যি বেশি</button>
-  </div>
-
-  <div class="statsRow">
-    <div class="statPill">🌙 লাইভ: <span id="liveCount">0</span></div>
-    <div class="statPill">🕒 সময়: <span id="clock">--</span></div>
-  </div>
-
+  <!-- Map -->
   <div id="map"></div>
 
-  <button id="fabAdd" class="fab">＋</button>
-
   <!-- Bottom Sheet -->
-  <div id="sheet" class="sheet">
-    <div class="sheetHandle"></div>
+  <section id="sheet" class="sheet" aria-label="আজকের সক্রিয় ইফতার">
+    <div id="sheetHandle" class="sheetHandle" aria-label="drag handle"></div>
 
     <div class="sheetHeader">
-      <div class="sheetTitle">🌙 আজকের সক্রিয় স্পট</div>
-      <select id="sort" class="select">
-        <option value="recent">সর্বশেষ</option>
-        <option value="truth">সত্যি বেশি</option>
-      </select>
+      <div class="sheetTitle">🍽️ আজকের সক্রিয় ইফতার</div>
+      <div class="sheetMeta"><span id="spotCount">0</span>টি</div>
     </div>
 
-    <div id="todayList" class="todayList">
-      <div class="empty">কোনো স্পট পাওয়া যায়নি</div>
+    <!-- List (Cards will render here from app.js) -->
+    <div id="list" class="list">
+      <div class="empty">কোনো স্পট নেই</div>
     </div>
+  </section>
 
-    <div class="credit">Developed by RU Crush and Confession</div>
-
-    <div class="miniRow">
-      <div class="mini">👁️ Visits: <span id="visits">0</span></div>
-      <div class="mini">🟢 Online: <span id="online">0</span></div>
-    </div>
-  </div>
-
-  <!-- Add Spot Modal -->
-  <div id="modal" class="modal hidden">
-    <div class="modalCard">
-      <div class="modalTitle">স্পট যোগ করুন</div>
-
-      <label>স্পট/মসজিদের নাম *</label>
-      <input id="name" placeholder="উদাহরণ: Kazla Mosque" />
-
-      <label>এলাকা/পয়েন্ট *</label>
-      <input id="area" placeholder="উদাহরণ: kazla" />
-
-      <label>ইফতারের ধরন *</label>
-      <select id="type">
-        <option value="mix">মিক্স ইফতার</option>
-        <option value="khichuri">খিচুড়ি</option>
-        <option value="biriyani">বিরিয়ানি</option>
-      </select>
-
-      <label>আইটেম (ঐচ্ছিক)</label>
-      <input id="items" placeholder="বেগুনি, ছোলা, হালিম..." />
-
-      <label>নোট (ঐচ্ছিক)</label>
-      <input id="notes" placeholder="সময়/দাম/অন্য তথ্য" />
-
-      <div class="locRow">
-        <div>📍 <span id="latlng">Map থেকে দিন</span></div>
-        <button id="btnPick" class="pill pill-ghost">Map থেকে দিন</button>
-      </div>
-
-      <button id="btnSubmit" class="btnSubmit">Submit</button>
-      <button id="btnClose" class="btnClose">বন্ধ</button>
-
-      <div class="hint">⚠️ রাজশাহীর ভেতরের লোকেশন দিন, নাহলে সাবমিট হবে না।</div>
-    </div>
-  </div>
-
-  <!-- libs -->
+  <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 
+  <!-- IMPORTANT: app.js must be type="module" because it imports firebase modules -->
   <script type="module" src="./app.js"></script>
+
 </body>
 </html>
