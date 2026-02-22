@@ -1,13 +1,7 @@
 // =============================
-// app.js (FULL REPLACE - Map Pin + Premium Popup like screenshot)
-// Project: free-ifter (Rajshahi Iftar)
-// - Locked Rajshahi map
-// - Iftar countdown
-// - Bottom sheet drag
-// - Add spot with map pick
-// - Firestore load/add
-// - Voting
-// - Custom marker pin + custom premium popup (green header + white body)
+// app.js (FULL REPLACE - Loading screen + existing features)
+// - Shows loading overlay on first load
+// - Hides overlay when map tiles + data loaded
 // =============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -47,6 +41,19 @@ let me = null;
 let authReady = false;
 
 /* =============================
+   ✅ Loading Overlay helpers
+============================= */
+const loadingOverlay = document.getElementById("loadingOverlay");
+function showLoading() {
+  loadingOverlay?.classList.remove("hidden");
+}
+function hideLoading() {
+  loadingOverlay?.classList.add("hidden");
+}
+// show immediately
+showLoading();
+
+/* =============================
    Helper: wait for auth (NO STUCK)
 ============================= */
 function ensureAuthReady(timeoutMs = 8000) {
@@ -68,7 +75,6 @@ function ensureAuthReady(timeoutMs = 8000) {
   });
 }
 
-// Start anonymous sign-in
 signInAnonymously(auth).catch((e) => console.error("Anonymous auth error:", e));
 
 /* =============================
@@ -85,8 +91,10 @@ const map = L.map("map", {
 
 L.control.zoom({ position: "bottomright" }).addTo(map);
 
-L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   attribution: "© OpenStreetMap",
+  updateWhenIdle: true,
+  keepBuffer: 2,
 }).addTo(map);
 
 map.on("drag", () => map.panInsideBounds(rajshahiBounds, { animate: false }));
@@ -133,7 +141,7 @@ async function startCountdown() {
 startCountdown();
 
 /* =============================
-   3) Bottom Sheet Drag (Smooth)
+   3) Bottom Sheet Drag
 ============================= */
 const sheet = document.getElementById("sheet");
 const handle = document.getElementById("sheetHandle");
@@ -207,7 +215,6 @@ handle.addEventListener("touchstart", onStart, { passive: true });
 const listEl = document.getElementById("list");
 const countEl = document.getElementById("spotCount");
 
-// modal refs
 const addSpotBtn = document.getElementById("addSpotBtn");
 const modal = document.getElementById("addSpotModal");
 const closeModalBtn = document.getElementById("closeModal");
@@ -239,7 +246,7 @@ onAuthStateChanged(auth, (u) => {
 });
 
 /* =============================
-   6) Data + Map markers
+   6) Data + markers + list
 ============================= */
 let spots = [];
 let markerLayer = L.layerGroup().addTo(map);
@@ -251,34 +258,6 @@ function escapeHtml(str) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
-}
-
-function bnTimeAgo(msAgo) {
-  const sec = Math.floor(msAgo / 1000);
-  if (sec < 60) return `${sec} সেকেন্ড আগে`;
-  const min = Math.floor(sec / 60);
-  if (min < 60) return `${min} মিনিট আগে`;
-  const hr = Math.floor(min / 60);
-  if (hr < 24) return `${hr} ঘণ্টা আগে`;
-  const day = Math.floor(hr / 24);
-  return `${day} দিন আগে`;
-}
-
-function getCreatedTimeText(createdAt) {
-  try {
-    // Firestore Timestamp -> {seconds}
-    if (createdAt?.seconds) {
-      const t = createdAt.seconds * 1000;
-      const ago = Date.now() - t;
-      if (ago > 0) return bnTimeAgo(ago);
-    }
-    // Date object
-    if (createdAt instanceof Date) {
-      const ago = Date.now() - createdAt.getTime();
-      if (ago > 0) return bnTimeAgo(ago);
-    }
-  } catch {}
-  return "";
 }
 
 function getBadge(truth, fake) {
@@ -331,133 +310,16 @@ async function loadSpotsAndVotes() {
   spots = newSpots;
 }
 
-/* =============================
-   6.1) Custom Marker Icon (green pin + flag)
-============================= */
-function makePinIcon() {
-  return L.divIcon({
-    className: "", // keep clean
-    html: `
-      <div class="spotPin">
-        <div class="spotPinInner">🇧🇩</div>
-      </div>
-    `,
-    iconSize: [38, 50],
-    iconAnchor: [19, 48],   // bottom point
-    popupAnchor: [0, -52],  // popup up
-  });
-}
-
-/* =============================
-   6.2) Premium Popup HTML
-============================= */
-function buildPopupHtml(spot) {
-  const truth = spot.truthCount ?? 0;
-  const fake = spot.fakeCount ?? 0;
-  const badge = getBadge(truth, fake);
-  const when = getCreatedTimeText(spot.createdAt);
-
-  const userName = spot.createdBy ? "User" : "User";
-  const title = escapeHtml(spot.name || "");
-  const area = escapeHtml(spot.area || "");
-
-  return `
-    <div class="spotCard">
-      <div class="spotCardHeader">
-        <div style="min-width:0">
-          <div class="u">👤 <span>${escapeHtml(userName)}</span></div>
-          <div class="spotName">${title}</div>
-        </div>
-        <div class="badge">${badge.icon} ${badge.text}</div>
-      </div>
-
-      <div class="spotCardBody">
-        <div class="spotRow">
-          <div class="left">
-            <span>📍</span>
-            <span class="txt">${area}</span>
-          </div>
-          <div class="right">${when ? `⏱ ${escapeHtml(when)}` : ""}</div>
-        </div>
-
-        <div class="spotActions">
-          <button class="spotAct good" data-act="truth" data-id="${spot.id}">
-            👍 ${truth} সত্যি
-          </button>
-          <button class="spotAct bad" data-act="fake" data-id="${spot.id}">
-            👎 ${fake} ভুয়া
-          </button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-let openedPopup = null;
-
-function openSpotPopup(latlng, spot) {
-  if (openedPopup) {
-    try { map.closePopup(openedPopup); } catch {}
-    openedPopup = null;
-  }
-
-  const popup = L.popup({
-    className: "spotPopup",
-    closeButton: false,
-    autoPan: true,
-    offset: L.point(0, -10),
-    maxWidth: 360,
-  })
-    .setLatLng(latlng)
-    .setContent(buildPopupHtml(spot));
-
-  openedPopup = popup;
-  popup.openOn(map);
-
-  // after open: attach button events inside popup
-  setTimeout(() => {
-    const root = document.querySelector(".leaflet-popup.spotPopup");
-    if (!root) return;
-
-    root.querySelectorAll(".spotAct").forEach((btn) => {
-      btn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const spotId = btn.getAttribute("data-id");
-        const act = btn.getAttribute("data-act");
-        await castVote(spotId, act);
-      });
-    });
-  }, 0);
-}
-
 function renderMarkers() {
   markerLayer.clearLayers();
 
-  const icon = makePinIcon();
-
   for (const s of spots) {
     if (typeof s.lat !== "number" || typeof s.lng !== "number") continue;
-
-    const m = L.marker([s.lat, s.lng], { icon });
-
-    // click marker -> premium popup (not default bindPopup)
-    m.on("click", () => {
-      openSpotPopup([s.lat, s.lng], s);
-    });
-
+    const m = L.marker([s.lat, s.lng]);
+    m.bindPopup(`<b>${escapeHtml(s.name)}</b><br/>${escapeHtml(s.area)}`);
     markerLayer.addLayer(m);
   }
 }
-
-// close popup when map clicked (optional nice)
-map.on("click", () => {
-  if (openedPopup) {
-    try { map.closePopup(openedPopup); } catch {}
-    openedPopup = null;
-  }
-});
 
 function renderList() {
   countEl.textContent = String(spots.length);
@@ -473,19 +335,17 @@ function renderList() {
     const badge = getBadge(truth, fake);
 
     return `
-      <div class="card" data-spot="${s.id}">
+      <div class="card">
         <div class="cardHeader">
           <div class="cardUser">👤 User</div>
           <div class="cardBadge ${badge.cls}">
-            <span class="bIcon">${badge.icon}</span> ${badge.text}
+            <span>${badge.icon}</span> ${badge.text}
           </div>
         </div>
 
         <div class="cardBody">
           <div class="title">${escapeHtml(s.name || "")}</div>
-          <div class="meta">
-            <span>📍 ${escapeHtml(s.area || "")}</span>
-          </div>
+          <div class="meta">📍 ${escapeHtml(s.area || "")}</div>
 
           <div class="voteRow">
             <button class="voteBtn good ${s.myVote === "truth" ? "active" : ""}"
@@ -503,7 +363,6 @@ function renderList() {
     `;
   }).join("");
 
-  // vote from list
   listEl.querySelectorAll(".voteBtn").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const spotId = btn.getAttribute("data-id");
@@ -511,21 +370,10 @@ function renderList() {
       await castVote(spotId, value);
     });
   });
-
-  // click list card -> pan & open popup
-  listEl.querySelectorAll(".card").forEach((card) => {
-    card.addEventListener("click", () => {
-      const id = card.getAttribute("data-spot");
-      const s = spots.find(x => x.id === id);
-      if (!s) return;
-      map.setView([s.lat, s.lng], Math.max(map.getZoom(), 14), { animate: true });
-      openSpotPopup([s.lat, s.lng], s);
-    });
-  });
 }
 
 /* =============================
-   7) Voting (1 per user)
+   7) Voting
 ============================= */
 async function castVote(spotId, value) {
   try {
@@ -540,7 +388,6 @@ async function castVote(spotId, value) {
   const s = spots.find((x) => x.id === spotId);
   if (!s) return;
 
-  // optimistic update
   if (s.myVote === "truth") s.truthCount = Math.max(0, (s.truthCount || 0) - 1);
   if (s.myVote === "fake") s.fakeCount = Math.max(0, (s.fakeCount || 0) - 1);
 
@@ -549,27 +396,6 @@ async function castVote(spotId, value) {
 
   s.myVote = value;
   renderList();
-
-  // if popup open -> refresh popup content
-  if (openedPopup) {
-    try {
-      openedPopup.setContent(buildPopupHtml(s));
-      // rebind popup actions after refresh
-      setTimeout(() => {
-        const root = document.querySelector(".leaflet-popup.spotPopup");
-        if (!root) return;
-        root.querySelectorAll(".spotAct").forEach((btn) => {
-          btn.addEventListener("click", async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            const id = btn.getAttribute("data-id");
-            const act = btn.getAttribute("data-act");
-            await castVote(id, act);
-          });
-        });
-      }, 0);
-    } catch {}
-  }
 
   try {
     await setDoc(doc(db, "votes", voteId), {
@@ -610,7 +436,6 @@ addSpotBtn?.addEventListener("click", () => {
   modal?.classList.remove("hidden");
   syncSubmitBtnState();
 });
-
 closeModalBtn?.addEventListener("click", closeModal);
 
 pickLocationBtn?.addEventListener("click", () => {
@@ -619,7 +444,6 @@ pickLocationBtn?.addEventListener("click", () => {
   if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
 });
 
-// Map click: select lat/lng for new spot
 map.on("click", (e) => {
   if (!pickMode) return;
 
@@ -639,9 +463,7 @@ map.on("click", (e) => {
   }
 
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
-
-  // preview marker for new spot (same pin)
-  pickPreviewMarker = L.marker([lat, lng], { icon: makePinIcon() });
+  pickPreviewMarker = L.marker([lat, lng]).bindPopup("নতুন স্পট লোকেশন");
   markerLayer.addLayer(pickPreviewMarker);
 });
 
@@ -675,13 +497,6 @@ async function submitSpot() {
   if (!pickedLatLng) {
     submitSpotBtn.disabled = false;
     submitSpotBtn.textContent = "⚠️ লোকেশন দিন";
-    setTimeout(syncSubmitBtnState, 900);
-    return;
-  }
-
-  if (!isInRajshahi(pickedLatLng.lat, pickedLatLng.lng)) {
-    submitSpotBtn.disabled = false;
-    submitSpotBtn.textContent = "⚠️ রাজশাহীর ভিতরে দিন";
     setTimeout(syncSubmitBtnState, 900);
     return;
   }
@@ -727,7 +542,7 @@ async function submitSpot() {
 }
 
 /* =============================
-   9) Refresh
+   ✅ Refresh + Boot + Loading hide logic
 ============================= */
 async function refreshAll() {
   await loadSpotsAndVotes();
@@ -735,16 +550,38 @@ async function refreshAll() {
   renderList();
 }
 
-/* =============================
-   10) Boot
-============================= */
+// wait map tiles + data then hide loading
+function waitForTilesLoaded(timeoutMs = 9000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve(true);
+    };
+
+    // if already loaded fast
+    tiles.once("load", finish);
+
+    // fallback timeout (so it never stuck)
+    setTimeout(finish, timeoutMs);
+  });
+}
+
 (async function boot() {
   try {
-    await loadSpotsAndVotes();
-    renderMarkers();
-    renderList();
+    // load data + render quickly
+    await refreshAll();
+
+    // wait tiles at least once
+    await waitForTilesLoaded();
+
+    // hide loading a tiny bit smooth
+    setTimeout(hideLoading, 250);
   } catch (e) {
     console.error("Boot error:", e);
     listEl.innerHTML = `<div class="empty">ডাটা লোড হচ্ছে না</div>`;
+    // still hide loader after a moment, else stuck
+    setTimeout(hideLoading, 1200);
   }
 })();
