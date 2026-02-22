@@ -1,5 +1,6 @@
 // =============================
 // app.js (FULL REPLACE - FIXED)
+// Project: free-ifter (Rajshahi Iftar)
 // - Rajshahi locked map
 // - Iftar countdown (Rajshahi Maghrib)
 // - Smooth bottom sheet drag
@@ -26,15 +27,16 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 /* =============================
-   0) Firebase Config (PUT YOURS)
+   0) Firebase Config (YOUR PROJECT)
 ============================= */
 const firebaseConfig = {
-  apiKey: "YOUR_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID",
+  apiKey: "AIzaSyA6SZeKVmNAsd4eAlieCTC7zQzYMenwJEA",
+  authDomain: "free-ifter.firebaseapp.com",
+  projectId: "free-ifter",
+  storageBucket: "free-ifter.firebasestorage.app",
+  messagingSenderId: "380765313810",
+  appId: "1:380765313810:web:6b7a87bf350cba858f71cb",
+  measurementId: "G-18J6SR9913",
 };
 
 const fbApp = initializeApp(firebaseConfig);
@@ -66,6 +68,7 @@ function ensureAuthReady(timeoutMs = 8000) {
   });
 }
 
+// Start anonymous sign-in
 signInAnonymously(auth).catch((e) => console.error("Anonymous auth error:", e));
 
 /* =============================
@@ -88,6 +91,7 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 map.on("drag", () => map.panInsideBounds(rajshahiBounds, { animate: false }));
 
+// Fix blank/grey tiles on load
 setTimeout(() => map.invalidateSize(true), 350);
 
 function isInRajshahi(lat, lng) {
@@ -382,7 +386,7 @@ async function castVote(spotId, value) {
     await setDoc(doc(db, "votes", voteId), {
       spotId,
       uid: me.uid,
-      value, // "truth" | "fake"
+      value,
       createdAt: serverTimestamp(),
     });
   } catch (e) {
