@@ -507,3 +507,116 @@ body{
   transform: scale(0.98);
   pointer-events: none;          /* ✅ card also non-clickable */
 }
+/* =========================
+   Leaflet Premium Popup Skin
+========================= */
+.premiumPopup .leaflet-popup-content-wrapper{
+  border-radius: 16px;
+  overflow: hidden;
+  padding: 0;
+  box-shadow: 0 18px 40px rgba(2,6,23,.18);
+}
+
+.premiumPopup .leaflet-popup-content{
+  margin: 0;
+  width: 320px; /* desktop */
+  font-family: 'Hind Siliguri', system-ui, -apple-system, sans-serif;
+}
+
+@media (max-width:480px){
+  .premiumPopup .leaflet-popup-content{ width: 280px; }
+}
+
+.premiumPopup .leaflet-popup-tip{
+  background: #ffffff;
+}
+
+/* =========================
+   Popup Card UI
+========================= */
+.pPopup{
+  background:#fff;
+}
+
+.pHead{
+  background: #166534; /* deep green */
+  color: #fff;
+  padding: 12px 14px;
+}
+
+.pHeadRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  opacity:.95;
+  margin-bottom:6px;
+}
+
+.pAuthor{
+  font-size:12px;
+  font-weight:600;
+  opacity:.9;
+}
+
+.pBadge{
+  font-size:12px;
+  font-weight:700;
+  padding:4px 10px;
+  border-radius:999px;
+  background: rgba(255,255,255,.18);
+  border:1px solid rgba(255,255,255,.25);
+}
+
+.pTitle{
+  font-size:16px;
+  font-weight:800;
+  line-height:1.25;
+}
+
+.pBody{
+  padding: 12px 14px 14px;
+}
+
+.pMetaRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  color:#64748b;
+  font-size:12px;
+  margin-bottom:10px;
+}
+
+.pVotes{
+  display:flex;
+  gap:10px;
+}
+
+.pVote{
+  flex:1;
+  border:1px solid #e5e7eb;
+  background:#fff;
+  border-radius:12px;
+  padding:8px 10px;
+  font-size:13px;
+  font-weight:700;
+  cursor:pointer;
+}
+
+.pVote.good{
+  background:#ecfdf5;
+  border-color:#bbf7d0;
+  color:#065f46;
+}
+
+.pVote.bad{
+  background:#fef2f2;
+  border-color:#fecaca;
+  color:#7f1d1d;
+}
+
+.pVote:disabled{
+  opacity:.6;
+  cursor:not-allowed;
+}
