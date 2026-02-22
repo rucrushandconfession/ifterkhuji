@@ -5,26 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Admin Dashboard — ইফতার খুঁজুন</title>
   <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+
   <style>
-    body{font-family:'Hind Siliguri',sans-serif;margin:16px;background:#f4f6f5}
+    body{font-family:'Hind Siliguri',sans-serif;margin:16px;background:#f4f6f5;color:#111}
     h2,h3{margin:10px 0}
     .bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-    button{border:0;border-radius:12px;padding:10px 12px;font-weight:1000;cursor:pointer}
+    button{border:0;border-radius:12px;padding:10px 12px;font-weight:800;cursor:pointer}
     .ok{background:#1e7f43;color:#fff}
     .no{background:#c0392b;color:#fff}
     .card{background:#fff;border-radius:14px;padding:12px;margin:10px 0;box-shadow:0 10px 20px rgba(0,0,0,.08)}
-    .muted{opacity:.75;font-size:12px;font-weight:900}
-    .pill{display:inline-block;background:#f3f4f6;border-radius:999px;padding:6px 10px;font-weight:1000;font-size:12px;margin-right:6px;margin-top:6px}
+    .muted{opacity:.75;font-size:12px;font-weight:700}
+    .pill{display:inline-block;background:#f3f4f6;border-radius:999px;padding:6px 10px;font-weight:800;font-size:12px;margin-right:6px;margin-top:6px}
     .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
     @media (max-width:600px){ .grid{grid-template-columns:1fr} }
+    .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+    a{color:#1e7f43;text-decoration:none;font-weight:800}
   </style>
 </head>
+
 <body>
   <h2>Admin Dashboard</h2>
 
   <div class="bar">
     <button id="login" class="ok">Google Login</button>
     <span class="muted" id="who">Not logged in</span>
+    <a href="./index.html">← Public Site</a>
   </div>
 
   <div class="grid" style="margin-top:12px;">
@@ -33,7 +38,7 @@
     <div class="card"><b>Reports Total</b><div class="muted" id="mReports">0</div></div>
     <div class="card"><b>Total Visits</b><div class="muted" id="mVisits">0</div></div>
     <div class="card"><b>Online Now</b><div class="muted" id="mOnline">0</div></div>
-    <div class="card"><b>Top Areas</b><div class="muted" id="mAreas">লোড হচ্ছে…</div></div>
+    <div class="card"><b>Top Areas</b><div class="muted" id="mAreas">—</div></div>
   </div>
 
   <h3>Pending Queue</h3>
@@ -42,11 +47,14 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
     import {
-      getFirestore, collection, onSnapshot, doc, getDoc, setDoc, deleteDoc,
-      serverTimestamp
+      getFirestore, collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
-    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
+    import {
+      getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+
+    // ✅ Same Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyA6SZeKVmNAsd4eAlieCTC7zQzYMenwJEA",
       authDomain: "free-ifter.firebaseapp.com",
@@ -76,46 +84,34 @@
     let user = null;
 
     loginBtn.onclick = async () => {
-      try { await signInWithPopup(auth, provider); } catch {}
+      try { await signInWithPopup(auth, provider); }
+      catch (e) { alert("Login cancel/failed"); }
     };
 
     onAuthStateChanged(auth, async (u) => {
       user = u;
-      if (!user) {
-        who.textContent = "Not logged in";
-        return;
-      }
-      who.textContent = `Logged: ${user.email || user.uid}`;
+      who.textContent = user ? `Logged: ${user.email || user.uid}` : "Not logged in";
     });
 
-    function mustBeAdmin(){
-      if (!user) return false;
-      // admin check doc: admins/{uid}
-      return true;
-    }
+    // Counters
+    onSnapshot(collection(db,"spots_pending"), (snap)=>{ mPending.textContent = snap.size; });
 
-    // Stats panels
-    onSnapshot(collection(db,"spots_pending"), (snap)=>{
-      mPending.textContent = snap.size;
-    });
     onSnapshot(collection(db,"spots_approved"), (snap)=>{
       mApproved.textContent = snap.size;
 
-      // Top areas (client-side)
       const counts = {};
       snap.forEach(d=>{
         const a = (d.data()?.area || "Unknown").trim();
         counts[a] = (counts[a]||0) + 1;
       });
+
       const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
       mAreas.textContent = top.length ? top.map(([k,v])=>`${k} (${v})`).join(" • ") : "—";
     });
-    onSnapshot(collection(db,"reports"), (snap)=>{
-      mReports.textContent = snap.size;
-    });
-    onSnapshot(doc(db,"stats","global"), (snap)=>{
-      mVisits.textContent = Number(snap.data()?.totalVisits || 0);
-    });
+
+    onSnapshot(collection(db,"reports"), (snap)=>{ mReports.textContent = snap.size; });
+    onSnapshot(doc(db,"stats","global"), (snap)=>{ mVisits.textContent = Number(snap.data()?.totalVisits || 0); });
+
     onSnapshot(collection(db,"presence"), (snap)=>{
       const now = Date.now();
       let online = 0;
@@ -126,7 +122,7 @@
       mOnline.textContent = online;
     });
 
-    // Pending queue + approve/reject
+    // Pending list + Approve/Reject
     onSnapshot(collection(db, "spots_pending"), async (snap) => {
       pendingEl.innerHTML = "";
 
@@ -135,10 +131,9 @@
         return;
       }
 
-      // strict admin check
       const adminSnap = await getDoc(doc(db,"admins", user.uid));
       if (!adminSnap.exists()) {
-        pendingEl.innerHTML = `<div class="card"><b>❌ Admin নয়</b><div class="muted">Firestore এ admins/${user.uid} doc বানান</div></div>`;
+        pendingEl.innerHTML = `<div class="card"><b>❌ Admin নয়</b><div class="muted">Firestore এ admins/${user.uid} doc তৈরি করুন</div></div>`;
         return;
       }
 
@@ -154,9 +149,11 @@
         div.innerHTML = `
           <b>${escapeHtml(s.name)}</b>
           <div class="muted">${escapeHtml(s.area)} • ${escapeHtml(s.type)}</div>
-          <div class="pill">lat: ${Number(s.lat).toFixed(5)}</div>
-          <div class="pill">lng: ${Number(s.lng).toFixed(5)}</div>
-          <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
+          <div class="row">
+            <span class="pill">lat: ${Number(s.lat).toFixed(5)}</span>
+            <span class="pill">lng: ${Number(s.lng).toFixed(5)}</span>
+          </div>
+          <div class="row">
             <button class="ok" data-id="${d.id}" data-act="approve">Approve</button>
             <button class="no" data-id="${d.id}" data-act="reject">Reject</button>
           </div>
@@ -183,6 +180,7 @@
         const data = snap.data();
         if (!data) return;
 
+        // ✅ Move to approved (same doc id)
         await setDoc(doc(db, "spots_approved", id), {
           ...data,
           status: "approved",
