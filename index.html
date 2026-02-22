@@ -1,33 +1,100 @@
 <!doctype html>
 <html lang="bn">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>ইফতার খুঁজুন — রাজশাহী বিশ্ববিদ্যালয়</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ইফতার খুঁজুন — RU</title>
 
-<link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<link rel="stylesheet" href="style.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
 
-<div class="topbar">
-  <div class="brand">🌙 ইফতার খুঁজুন</div>
-  <button id="loginBtn">Login</button>
-</div>
+  <!-- Top overlay -->
+  <div class="topbar">
+    <button class="brandBtn" id="brandBtn" type="button">
+      <span class="brandLogo">🌙</span>
+      <span class="brandText">ইফতার<br/>খুঁজুন</span>
+    </button>
 
-<div class="stats">
-  <div id="countdown">লোড হচ্ছে...</div>
-</div>
+    <div class="searchWrap">
+      <span class="searchIcon">🔎</span>
+      <input id="searchInput" class="searchInput" type="text" placeholder="মসজিদ বা এলাকা খুঁজুন" />
+    </div>
 
-<div id="map"></div>
+    <button class="pillBtn" id="gpsBtn" type="button">📍 GPS</button>
+  </div>
 
-<button id="addBtn" class="addBtn">স্পট যোগ করুন</button>
+  <!-- Pills -->
+  <div class="statsRow">
+    <div class="statPill" id="totalPill">🌙 আজকের স্পট: 0টি</div>
+    <div class="statPill ok" id="verifiedPill">✓ নিশ্চিত: 0টি</div>
+    <div class="countdownPill" id="iftarCountdown">🌙 ইফতার কাউন্টডাউন লোড হচ্ছে…</div>
+    <div class="hintText" id="hintText">ম্যাপে ট্যাপ করে পিন সেট করুন</div>
+  </div>
 
-<div id="list"></div>
+  <!-- Map -->
+  <div id="map"></div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script type="module" src="app.js"></script>
+  <!-- Floating add -->
+  <button class="fab" id="addSpotBtn" type="button">＋ স্পট যোগ</button>
 
+  <!-- Bottom sheet -->
+  <section class="sheet" id="sheet">
+    <div class="sheetHandle"></div>
+
+    <div class="sheetHeader">
+      <div class="sheetTitle">
+        <div class="sheetTitleMain">আজকের সক্রিয় স্পট</div>
+        <div class="sheetTitleSub">RU এলাকার ভিতরে</div>
+      </div>
+
+      <button class="ghostBtn" id="centerRuBtn" type="button">RU Center</button>
+    </div>
+
+    <div class="sheetList" id="list"></div>
+  </section>
+
+  <!-- Modal -->
+  <div class="modalBackdrop" id="modalBackdrop" hidden></div>
+  <div class="modal" id="modal" hidden>
+    <div class="modalHeader">
+      <div>
+        <div class="modalTitle">ইফতার স্পট যোগ করুন</div>
+        <div class="modalSub">পিন সেট করে ফর্ম পূরণ করুন (লগিন লাগবে না)</div>
+      </div>
+      <button class="ghostBtn dark" id="closeModalBtn" type="button">✕</button>
+    </div>
+
+    <form class="form" id="spotForm">
+      <label class="lbl">মসজিদ/স্পট নাম *</label>
+      <input class="inp" id="spotName" type="text" placeholder="যেমন: কেন্দ্রীয় মসজিদ" required minlength="3" maxlength="60" />
+
+      <label class="lbl">এলাকা/পয়েন্ট *</label>
+      <input class="inp" id="spotArea" type="text" placeholder="যেমন: কাজলা গেট" required minlength="2" maxlength="60" />
+
+      <label class="lbl">ইফতারের ধরন *</label>
+      <select class="inp" id="foodType" required>
+        <option value="">নির্বাচন করুন</option>
+        <option value="মিক্স ইফতার">মিক্স ইফতার</option>
+        <option value="খিচুড়ি">খিচুড়ি</option>
+        <option value="বিরিয়ানি">বিরিয়ানি</option>
+      </select>
+
+      <div class="infoBox" id="foodInfo">মিক্স ইফতার = বেগুনি, ছোলা, পেঁয়াজু, হালিম, শরবত</div>
+
+      <div class="latlngRow">
+        <div class="latlngPill" id="latlngPill">📍 পিন সেট হয়নি</div>
+        <button class="ghostBtn dark" id="pickOnMapBtn" type="button">Map থেকে দিন</button>
+      </div>
+
+      <button class="primaryBtn" id="submitBtn" type="submit">🌙 এই স্পটটি যোগ করুন</button>
+      <div class="tinyNote">⚠️ RU এলাকার বাইরে হলে যোগ হবে না। স্প্যাম করলে ব্লক হতে পারে (soft protection)।</div>
+    </form>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
 </html>
