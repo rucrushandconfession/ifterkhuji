@@ -3,36 +3,48 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ইফতার খুঁজুন — RU</title>
+  <title>ইফতার খুঁজুন — রাজশাহী</title>
 
   <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+
   <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
 
   <!-- Top overlay -->
   <div class="topbar">
-    <button class="brandBtn" id="brandBtn" type="button">
+    <button class="brandBtn" type="button" id="brandBtn">
       <span class="brandLogo">🌙</span>
       <span class="brandText">ইফতার<br/>খুঁজুন</span>
     </button>
 
     <div class="searchWrap">
       <span class="searchIcon">🔎</span>
-      <input id="searchInput" class="searchInput" type="text" placeholder="মসজিদ বা এলাকা খুঁজুন" />
+      <input id="searchInput" class="searchInput" type="text" placeholder="মসজিদ/এলাকা/টাইপ খুঁজুন" />
     </div>
 
     <button class="pillBtn" id="gpsBtn" type="button">📍 GPS</button>
   </div>
 
+  <!-- Filter chips -->
+  <div class="chipsRow" id="chipsRow">
+    <button class="chip active" data-filter="all">সব</button>
+    <button class="chip" data-filter="মিক্স ইফতার">মিক্স</button>
+    <button class="chip" data-filter="খিচুড়ি">খিচুড়ি</button>
+    <button class="chip" data-filter="বিরিয়ানি">বিরিয়ানি</button>
+    <button class="chip" data-filter="truthy">সত্যি বেশি</button>
+  </div>
+
   <!-- Pills -->
   <div class="statsRow">
-    <div class="statPill" id="totalPill">🌙 আজকের স্পট: 0টি</div>
-    <div class="statPill ok" id="verifiedPill">✓ নিশ্চিত: 0টি</div>
-    <div class="statPill" id="visitorsPill">Visitors: -- | Unique: --</div>
-    <div class="countdownPill" id="iftarCountdown">🌙 ইফতার কাউন্টডাউন লোড হচ্ছে…</div>
-    <div class="hintText" id="hintText">ম্যাপে ট্যাপ করে পিন সেট করুন</div>
+    <div class="statPill" id="totalPill">🌙 লাইভ স্পট: 0টি</div>
+    <div class="statPill ok" id="pendingPill">⏳ Pending: 0টি</div>
+    <div class="countdownPill" id="iftarCountdown">🌙 কাউন্টডাউন লোড হচ্ছে…</div>
+    <div class="hintText" id="sheetTitleMain">আজকের সক্রিয় স্পট</div>
   </div>
 
   <!-- Map -->
@@ -43,26 +55,27 @@
 
   <!-- Bottom sheet -->
   <section class="sheet" id="sheet">
-    <div class="sheetHandle" id="sheetHandle" aria-label="Drag panel handle"></div>
+    <div class="sheetHandle" id="sheetHandle"></div>
 
     <div class="sheetHeader">
       <div class="sheetTitle">
-        <div class="sheetTitleMain">আজকের সক্রিয় স্পট</div>
-        <div class="sheetTitleSub">রাজশাহী এলাকার ভিতরে</div>
+        <div class="sheetTitleMain" id="sheetTitleSub">রাজশাহী শহর কেন্দ্রিক</div>
+        <div class="sheetTitleSub">Admin approve হলে লাইভ হবে • Vote/Report একবার</div>
       </div>
 
-      <div class="sheetActions">
-        <button class="ghostBtn" id="sheetCollapseBtn" type="button" aria-label="Collapse panel">▾</button>
-        <button class="ghostBtn" id="centerRuBtn" type="button">Rajshahi Center</button>
-      </div>
+      <button class="ghostBtn" id="centerBtn" type="button">রাজশাহী</button>
     </div>
 
     <div class="sheetList" id="list"></div>
   </section>
 
-  <footer class="appCredit">
-    Developed by Ru Crush and Confession
-    <span class="creditVisitors" id="visitorFooterCounts">Visitors: -- | Unique: --</span>
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footerText">Developed by RU Crush and Confession</div>
+    <div class="visitorPills">
+      <span class="vPill" id="totalVisits">👁️ Visits: 0</span>
+      <span class="vPill" id="onlineNow">🟢 Online: 0</span>
+    </div>
   </footer>
 
   <!-- Modal -->
@@ -71,17 +84,17 @@
     <div class="modalHeader">
       <div>
         <div class="modalTitle">ইফতার স্পট যোগ করুন</div>
-        <div class="modalSub">পিন সেট করে ফর্ম পূরণ করুন (লগিন লাগবে না)</div>
+        <div class="modalSub">Submit করলে Pending হবে → Admin approve করলে লাইভ</div>
       </div>
       <button class="ghostBtn dark" id="closeModalBtn" type="button">✕</button>
     </div>
 
     <form class="form" id="spotForm">
-      <label class="lbl">মসজিদ/স্পট নাম *</label>
+      <label class="lbl">স্পট/মসজিদের নাম *</label>
       <input class="inp" id="spotName" type="text" placeholder="যেমন: কেন্দ্রীয় মসজিদ" required minlength="3" maxlength="60" />
 
       <label class="lbl">এলাকা/পয়েন্ট *</label>
-      <input class="inp" id="spotArea" type="text" placeholder="যেমন: কাজলা গেট" required minlength="2" maxlength="60" />
+      <input class="inp" id="spotArea" type="text" placeholder="যেমন: সাহেব বাজার / কাজলা" required minlength="2" maxlength="60" />
 
       <label class="lbl">ইফতারের ধরন *</label>
       <select class="inp" id="foodType" required>
@@ -94,16 +107,17 @@
       <div class="infoBox" id="foodInfo">মিক্স ইফতার = বেগুনি, ছোলা, পেঁয়াজু, হালিম, শরবত</div>
 
       <div class="latlngRow">
-        <div class="latlngPill" id="latlngPill">📍 পিন সেট হয়নি</div>
+        <div class="latlngPill" id="latlngPill">📍 পিন সেট হয়নি (ম্যাপে ট্যাপ করুন)</div>
         <button class="ghostBtn dark" id="pickOnMapBtn" type="button">Map থেকে দিন</button>
       </div>
 
-      <button class="primaryBtn" id="submitBtn" type="submit">🌙 এই স্পটটি যোগ করুন</button>
-      <div class="tinyNote">⚠️ রাজশাহী এলাকার বাইরে হলে যোগ হবে না। স্প্যাম করলে ব্লক হতে পারে (soft protection)।</div>
+      <button class="primaryBtn" id="submitBtn" type="submit">🌙 Submit (Pending)</button>
+      <div class="tinyNote">⚠️ একই নাম + কাছাকাছি হলে ডুপ্লিকেট ব্লক হবে।</div>
     </form>
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script type="module" src="./app.js"></script>
 </body>
 </html>
