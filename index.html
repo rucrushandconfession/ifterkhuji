@@ -79,13 +79,45 @@
   </section>
 
   <!-- =========================
+       ADD SPOT MODAL
+  ========================== -->
+  <div id="addSpotModal" class="modal hidden" aria-label="ইফতার স্পট যোগ করুন">
+    <div class="modalCard">
+
+      <div class="modalHeader">
+        <div>
+          <div class="modalTitle">📍 ইফতার স্পট যোগ করুন</div>
+          <div class="modalSub">উম্মাকে ইফতার খুঁজে পেতে সাহায্য করুন</div>
+        </div>
+        <button id="closeModal" class="modalClose" aria-label="Close">✕</button>
+      </div>
+
+      <div class="modalBody">
+        <label>স্পট / মসজিদের নাম *</label>
+        <input id="spotName" placeholder="উদাহরণ: কাজলা জামে মসজিদ" />
+
+        <label>এলাকা *</label>
+        <input id="spotArea" placeholder="উদাহরণ: কাজলা, রাজশাহী" />
+
+        <div class="pinRow">
+          <div id="pickedLatLng" class="pinText">📍 ম্যাপ থেকে লোকেশন দিন</div>
+          <button id="pickLocationBtn" class="pinBtn">ম্যাপ থেকে দিন</button>
+        </div>
+
+        <button id="submitSpotBtn" class="submitBtn">স্পট যোগ করুন</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- =========================
        SCRIPTS
   ========================== -->
 
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- App JS (Firebase + Map + Countdown + Voting + Sheet drag) -->
+  <!-- App JS (module) -->
   <script type="module" src="./app.js"></script>
 
 </body>
