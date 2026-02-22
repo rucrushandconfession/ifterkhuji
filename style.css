@@ -1,441 +1,509 @@
 /* =========================
-   Fonts
+   FULL REPLACE: style.css
+   Rajshahi Iftar (Premium)
+   - Hind Siliguri
+   - Fixed map layout (no padding glitch)
+   - Smooth bottom sheet
+   - Floating add button
+   - Modal form
+   - Voting pills
 ========================= */
-@import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap');
 
 :root{
-  --bg:#f8fafc;
-  --card:#ffffff;
+  --bg:#f6f7f6;
   --text:#0f172a;
   --muted:#64748b;
-  --primary:#16a34a;
-  --primaryDark:#166534;
-  --danger:#dc2626;
-  --border:#e5e7eb;
-  --shadow:0 10px 30px rgba(2,6,23,.08);
+
+  --green:#275130;
+  --green-dark:#1f3f27;
+
+  --card:#ffffff;
+  --border: rgba(2,6,23,0.08);
+
+  --radius-xl: 26px;
+  --radius-lg: 20px;
+  --radius-md: 16px;
+
+  --shadow-sm: 0 6px 16px rgba(2,6,23,0.08);
+  --shadow-md: 0 14px 30px rgba(2,6,23,0.12);
+}
+
+*{ box-sizing: border-box; }
+
+html,body{ height:100%; }
+
+body{
+  margin:0;
+  font-family: "Hind Siliguri", system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden; /* map + sheet fixed layout */
 }
 
 /* =========================
-   Reset
-========================= */
-*{ box-sizing:border-box; margin:0; padding:0; }
-html,body{
-  height:100%;
-  font-family:'Hind Siliguri',system-ui,-apple-system,sans-serif;
-  background:var(--bg);
-  color:var(--text);
-}
-
-/* =========================
-   Top Bar
+   TOP BAR
 ========================= */
 .topbar{
-  position:fixed;
-  top:0;left:0;right:0;
-  height:64px;
-  background:#ffffff;
+  position: fixed;
+  left:0; right:0; top:0;
+  z-index: 1200;
+
   display:flex;
   align-items:center;
   justify-content:space-between;
-  padding:0 16px;
-  z-index:20;
-  box-shadow:0 2px 8px rgba(0,0,0,.06);
-}
-.topbar .title{
-  font-weight:800;
-  font-size:18px;
-}
-.topbar .subtitle{
-  font-size:12px;
-  color:var(--muted);
-}
-.countdown{
-  background:#ecfdf5;
-  color:#065f46;
-  padding:6px 12px;
-  border-radius:999px;
-  font-weight:700;
-  font-size:14px;
+  gap:10px;
+
+  padding: 12px;
+
+  background: rgba(246,247,246,0.94);
+  backdrop-filter: blur(10px);
 }
 
-/* =========================
-   Map
-========================= */
-#map{
-  position:fixed;
-  inset:64px 0 0 0;
-  z-index:1;
+.brand{
+  font-weight: 900;
+  font-size: 18px;
+  color: var(--green-dark);
+
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+
+  padding: 10px 14px;
+  box-shadow: var(--shadow-sm);
 }
 
-/* =========================
-   Floating Add Button
-========================= */
-#addSpotBtn{
-  position:fixed;
-  right:16px;
-  bottom:110px;
-  width:54px;
-  height:54px;
-  border-radius:999px;
-  background:var(--primary);
-  color:#fff;
-  border:none;
-  font-size:22px;
-  font-weight:800;
-  box-shadow:0 12px 28px rgba(22,163,74,.35);
-  z-index:15;
-  cursor:pointer;
-}
-
-/* =========================
-   Bottom Sheet
-========================= */
-#sheet{
-  position:fixed;
-  left:0;right:0;bottom:0;
-  background:var(--card);
-  border-radius:18px 18px 0 0;
-  box-shadow:var(--shadow);
-  z-index:10;
+.countdownPill{
   display:flex;
   flex-direction:column;
-  overflow:hidden;
+  align-items:flex-end;
+  gap:2px;
+
+  background: var(--green);
+  color:#fff;
+
+  border-radius: 18px;
+  padding: 10px 14px;
+  box-shadow: 0 6px 16px rgba(2,6,23,0.12);
 }
 
-#sheetHandle{
-  width:52px;
-  height:5px;
-  border-radius:999px;
-  background:#d1d5db;
-  margin:10px auto 6px;
+.countdownPill .label{
+  font-size: 12px;
+  font-weight: 700;
+  opacity: .9;
+}
+
+.countdownPill .time{
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: .2px;
+}
+
+/* =========================
+   MAP (FIXED - no padding)
+========================= */
+#map{
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 64px;   /* reserve for topbar */
+  bottom: 0;
+  z-index: 1;
+}
+
+/* =========================
+   BOTTOM SHEET
+========================= */
+.sheet{
+  position: fixed;
+  left: 10px;
+  right: 10px;
+  bottom: 10px;
+  z-index: 1300;
+
+  /* height controlled by JS; keep safe defaults */
+  height: 42vh;
+  max-height: 86vh;
+  min-height: 14vh;
+
+  background: var(--green);
+  color: #fff;
+
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+
+  display:flex;
+  flex-direction: column;
+
+  will-change: height;
+}
+
+.sheetHandle{
+  width: 64px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.45);
+  margin: 10px auto 10px;
 }
 
 .sheetHeader{
-  padding:10px 16px;
-  font-weight:700;
-  font-size:14px;
   display:flex;
   align-items:center;
   justify-content:space-between;
+  gap: 10px;
+  padding: 0 14px 10px;
 }
 
-#spotCount{
-  font-weight:800;
+.sheetTitle{
+  font-weight: 900;
+  font-size: 18px;
+  display:flex;
+  align-items:center;
+  gap: 10px;
 }
 
-#list{
-  padding:10px 12px 24px;
-  overflow-y:auto;
+.sheetMeta{
+  background: rgba(255,255,255,0.18);
+  border: 1px solid rgba(255,255,255,0.22);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-weight: 900;
+}
+
+/* list wrapper */
+.list{
+  margin: 0 10px 12px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: var(--radius-lg);
+
+  padding: 10px;
+  overflow: auto;
+  flex: 1;
+}
+
+.empty{
+  padding: 14px 12px;
+  border-radius: var(--radius-md);
+  background: rgba(255,255,255,0.14);
+  font-weight: 800;
+  text-align: center;
 }
 
 /* =========================
-   Card (Spot List)
+   SPOT CARD (Premium)
 ========================= */
 .card{
+  background: #fff;
+  color: #111827;
+
+  border-radius: 18px;
+  padding: 12px;
+  margin-bottom: 12px;
+
+  box-shadow: 0 8px 18px rgba(2,6,23,0.10);
+
   display:flex;
-  gap:12px;
-  padding:12px;
-  background:var(--card);
-  border-radius:14px;
-  box-shadow:0 6px 16px rgba(2,6,23,.08);
-  margin-bottom:12px;
+  gap: 12px;
+  align-items:flex-start;
 }
 
-.card .icon{
-  width:44px;
-  height:44px;
-  border-radius:12px;
+.icon{
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: #f1f5f4;
+
   display:flex;
   align-items:center;
   justify-content:center;
-  background:#f1f5f9;
-  font-size:20px;
+
+  font-size: 22px;
+  flex: 0 0 auto;
 }
 
-.card .main{ flex:1; }
-
-.card .title{
-  font-weight:800;
-  font-size:15px;
-  line-height:1.2;
+.main{
+  flex: 1;
+  min-width: 0;
 }
 
-.card .meta{
-  font-size:12px;
-  color:var(--muted);
-  margin-top:4px;
+.title{
+  font-weight: 900;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.meta{
+  margin-top: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+
+  display:flex;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 /* =========================
-   Voting (List)
+   VOTING (Premium Pills)
 ========================= */
 .voteRow{
+  margin-top: 10px;
   display:flex;
-  gap:8px;
-  margin-top:10px;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items:center;
 }
 
 .voteBtn{
-  flex:1;
-  border:1px solid var(--border);
-  background:#fff;
-  border-radius:12px;
-  padding:8px 0;
-  font-size:13px;
-  font-weight:800;
-  cursor:pointer;
+  border: 0;
+  cursor: pointer;
+
+  border-radius: 999px;
+  padding: 10px 14px;
+
+  font-weight: 900;
+  font-size: 14px;
+  line-height: 1;
+
+  font-family: "Hind Siliguri", system-ui, -apple-system, Segoe UI, Roboto, Arial;
+
+  display:inline-flex;
+  align-items:center;
+  gap: 8px;
+
+  box-shadow: 0 6px 14px rgba(2,6,23,0.10);
+  transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+
+  user-select:none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.voteBtn.good.active{
-  background:#ecfdf5;
-  border-color:#86efac;
-  color:#065f46;
+.voteBtn:active{
+  transform: scale(0.97);
+  box-shadow: 0 4px 10px rgba(2,6,23,0.12);
 }
 
-.voteBtn.bad.active{
-  background:#fef2f2;
-  border-color:#fecaca;
-  color:#7f1d1d;
+.voteBtn.good{
+  background: #e9f7ee;
+  color: #187a3b;
+}
+
+.voteBtn.bad{
+  background: #fdeaea;
+  color: #b42318;
+}
+
+.voteBtn.active{
+  outline: 3px solid rgba(39,81,48,0.22);
 }
 
 .voteBtn:disabled{
-  opacity:.55;
-  cursor:not-allowed;
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 /* =========================
-   Empty State
+   FLOATING ADD BUTTON (➕)
 ========================= */
-.empty{
-  text-align:center;
-  padding:40px 12px;
-  color:var(--muted);
-}
+.addSpotBtn{
+  position: fixed;
+  right: 18px;
+  bottom: 120px; /* above bottom sheet */
+  z-index: 1400;
 
-/* =========================
-   Modal
-========================= */
-.modal{
-  position:fixed;
-  inset:0;
-  background:rgba(2,6,23,.55);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+
+  border: none;
+  cursor: pointer;
+
+  background: linear-gradient(135deg, #2f6b3a, #275130);
+  color: #fff;
+
+  font-size: 26px;
+  font-weight: 900;
+  font-family: "Hind Siliguri", system-ui;
+
   display:flex;
   align-items:center;
   justify-content:center;
-  z-index:30;
+
+  box-shadow: 0 10px 22px rgba(2,6,23,0.25);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.addSpotBtn:active{
+  transform: scale(0.95);
+  box-shadow: 0 6px 14px rgba(2,6,23,0.25);
+}
+
+/* =========================
+   ADD SPOT MODAL (Premium)
+========================= */
+.modal{
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  background: rgba(2,6,23,0.45);
+
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding: 14px;
 }
 
 .modal.hidden{ display:none; }
 
 .modalCard{
-  width:92%;
-  max-width:420px;
-  background:#fff;
-  border-radius:16px;
-  padding:18px;
-  box-shadow:0 18px 44px rgba(2,6,23,.22);
+  width: 100%;
+  max-width: 420px;
+  background: #fff;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.25);
+  position: relative;
 }
 
-.modalCard h2{
-  font-size:18px;
-  font-weight:900;
+.modalHeader{
+  background: #b77a12; /* premium gold */
+  color: #fff;
+  padding: 14px;
 }
 
-.modalCard p{
-  font-size:13px;
-  color:var(--muted);
-  margin:6px 0 12px;
+.modalTitle{
+  font-size: 18px;
+  font-weight: 900;
 }
 
-.modalCard input{
-  width:100%;
-  padding:11px 12px;
-  border-radius:12px;
-  border:1px solid var(--border);
-  font-size:14px;
-  margin-bottom:10px;
-  outline:none;
-}
-.modalCard input:focus{
-  border-color:#86efac;
-  box-shadow:0 0 0 3px rgba(22,163,74,.12);
+.modalSub{
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.95;
 }
 
-#pickedLatLng{
-  font-size:13px;
-  color:var(--muted);
-  margin-top:2px;
+.modalClose{
+  position: absolute;
+  top: 12px;
+  right: 12px;
+
+  border: 0;
+  background: rgba(255,255,255,0.18);
+  color: #fff;
+
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+
+  font-size: 18px;
+  cursor: pointer;
+  font-weight: 900;
 }
 
-.modalActions{
+.modalBody{
+  padding: 14px;
+}
+
+.modalBody label{
+  display:block;
+  font-weight: 800;
+  margin-top: 12px;
+}
+
+.modalBody input{
+  width: 100%;
+  margin-top: 6px;
+  padding: 12px;
+
+  border-radius: 14px;
+  border: 1px solid rgba(2,6,23,0.12);
+
+  font-family: "Hind Siliguri", system-ui;
+  font-weight: 700;
+  outline: none;
+}
+
+.modalBody input:focus{
+  border-color: rgba(39,81,48,0.35);
+  box-shadow: 0 0 0 4px rgba(39,81,48,0.12);
+}
+
+.pinRow{
+  margin-top: 14px;
   display:flex;
-  gap:10px;
-  margin-top:12px;
+  align-items:center;
+  justify-content:space-between;
+  gap: 10px;
 }
 
-.modalActions button{
-  flex:1;
-  border:none;
-  border-radius:12px;
-  padding:11px;
-  font-size:14px;
-  font-weight:900;
-  cursor:pointer;
+.pinText{
+  font-weight: 700;
+  font-size: 13px;
+  color: #334155;
 }
 
-#pickLocationBtn{
-  background:#e0f2fe;
-  color:#075985;
+.pinBtn{
+  border: 0;
+  background: #eef2f7;
+
+  border-radius: 999px;
+  padding: 8px 12px;
+
+  font-weight: 900;
+  cursor: pointer;
+  font-family: "Hind Siliguri", system-ui;
 }
 
-#submitSpotBtn{
-  background:var(--primary);
-  color:#fff;
+.submitBtn{
+  margin-top: 18px;
+  width: 100%;
+
+  border: 0;
+  border-radius: 16px;
+  padding: 12px;
+
+  background: #275130;
+  color: #fff;
+
+  font-weight: 900;
+  font-size: 15px;
+  cursor: pointer;
+
+  font-family: "Hind Siliguri", system-ui;
 }
 
-#closeModal{
-  background:#f1f5f9;
+.submitBtn:active{
+  transform: scale(0.99);
 }
 
 /* =========================
-   Pick Mode (IMPORTANT FIX)
-   allow map click
+   RESPONSIVE
+========================= */
+@media (max-width: 420px){
+  .brand{
+    font-size: 16px;
+    padding: 9px 12px;
+  }
+  .countdownPill .time{
+    font-size: 15px;
+  }
+  .voteBtn{
+    padding: 9px 12px;
+    font-size: 13px;
+  }
+}
+/* =========================
+   PICK MODE: allow map click
 ========================= */
 .modal.pickMode{
-  background:rgba(2,6,23,.15);
-  pointer-events:none;
+  background: rgba(2,6,23,0.10); /* light dim */
+  pointer-events: none;          /* ✅ let map receive clicks */
 }
+
 .modal.pickMode .modalCard{
-  opacity:.35;
-  transform:scale(.98);
-  pointer-events:none;
-}
-
-/* =========================
-   Leaflet Premium Popup Skin
-========================= */
-.premiumPopup .leaflet-popup-content-wrapper{
-  border-radius: 16px;
-  overflow: hidden;
-  padding: 0;
-  box-shadow: 0 18px 40px rgba(2,6,23,.18);
-}
-
-.premiumPopup .leaflet-popup-content{
-  margin: 0;
-  width: 320px;
-  font-family: 'Hind Siliguri', system-ui, -apple-system, sans-serif;
-}
-
-@media (max-width:480px){
-  .premiumPopup .leaflet-popup-content{ width: 280px; }
-}
-
-.premiumPopup .leaflet-popup-tip{
-  background: #ffffff;
-}
-
-/* =========================
-   Popup Card UI (Premium)
-========================= */
-.pPopup{
-  background:#fff;
-}
-
-.pHead{
-  background: var(--primaryDark);
-  color: #fff;
-  padding: 12px 14px;
-}
-
-.pHeadRow{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  opacity:.95;
-  margin-bottom:6px;
-}
-
-.pAuthor{
-  font-size:12px;
-  font-weight:800;
-  opacity:.9;
-}
-
-.pBadge{
-  font-size:12px;
-  font-weight:900;
-  padding:4px 10px;
-  border-radius:999px;
-  background: rgba(255,255,255,.18);
-  border:1px solid rgba(255,255,255,.25);
-}
-
-.pTitle{
-  font-size:16px;
-  font-weight:900;
-  line-height:1.25;
-}
-
-.pBody{
-  padding: 12px 14px 14px;
-}
-
-.pMetaRow{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  color:#64748b;
-  font-size:12px;
-  margin-bottom:10px;
-}
-
-.pVotes{
-  display:flex;
-  gap:10px;
-}
-
-.pVote{
-  flex:1;
-  border:1px solid #e5e7eb;
-  background:#fff;
-  border-radius:12px;
-  padding:8px 10px;
-  font-size:13px;
-  font-weight:900;
-  cursor:pointer;
-}
-
-.pVote.good{
-  background:#ecfdf5;
-  border-color:#bbf7d0;
-  color:#065f46;
-}
-
-.pVote.bad{
-  background:#fef2f2;
-  border-color:#fecaca;
-  color:#7f1d1d;
-}
-
-.pVote:disabled{
-  opacity:.6;
-  cursor:not-allowed;
-}
-
-/* =========================
-   Leaflet small tweaks
-========================= */
-.leaflet-control-zoom a{
-  border-radius:12px !important;
-}
-
-/* =========================
-   Mobile tweaks
-========================= */
-@media (max-width:480px){
-  .topbar .title{ font-size:16px; }
-  #addSpotBtn{ bottom:120px; }
+  opacity: 0.35;                 /* visual hint */
+  transform: scale(0.98);
+  pointer-events: none;          /* ✅ card also non-clickable */
 }
