@@ -11,15 +11,20 @@
   <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
 
   <!-- Leaflet CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  />
 
-  <!-- Your CSS -->
+  <!-- App CSS -->
   <link rel="stylesheet" href="./style.css" />
 </head>
 
 <body>
 
-  <!-- Top Bar (Minimal) -->
+  <!-- =========================
+       TOP BAR
+  ========================== -->
   <header class="topbar">
     <div class="brand">🌙 রাজশাহী ইফতার</div>
 
@@ -29,28 +34,58 @@
     </div>
   </header>
 
-  <!-- Map -->
+  <!-- =========================
+       MAP
+  ========================== -->
   <div id="map"></div>
 
-  <!-- Bottom Sheet -->
-  <section id="sheet" class="sheet" aria-label="আজকের সক্রিয় ইফতার">
-    <div id="sheetHandle" class="sheetHandle" aria-label="drag handle"></div>
+  <!-- =========================
+       ADD SPOT FLOATING BUTTON
+  ========================== -->
+  <button
+    id="addSpotBtn"
+    class="addSpotBtn"
+    title="স্পট যোগ করুন"
+    aria-label="স্পট যোগ করুন"
+  >
+    ➕
+  </button>
+
+  <!-- =========================
+       BOTTOM SHEET
+  ========================== -->
+  <section
+    id="sheet"
+    class="sheet"
+    aria-label="আজকের সক্রিয় ইফতার"
+  >
+    <div
+      id="sheetHandle"
+      class="sheetHandle"
+      aria-label="drag handle"
+    ></div>
 
     <div class="sheetHeader">
       <div class="sheetTitle">🍽️ আজকের সক্রিয় ইফতার</div>
-      <div class="sheetMeta"><span id="spotCount">0</span>টি</div>
+      <div class="sheetMeta">
+        <span id="spotCount">0</span>টি
+      </div>
     </div>
 
-    <!-- List (Cards will render here from app.js) -->
+    <!-- List (cards render from app.js) -->
     <div id="list" class="list">
       <div class="empty">কোনো স্পট নেই</div>
     </div>
   </section>
 
+  <!-- =========================
+       SCRIPTS
+  ========================== -->
+
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- IMPORTANT: app.js must be type="module" because it imports firebase modules -->
+  <!-- App JS (Firebase + Map + Countdown + Voting + Sheet drag) -->
   <script type="module" src="./app.js"></script>
 
 </body>
