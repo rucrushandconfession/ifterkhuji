@@ -1,47 +1,269 @@
+:root{
+  --bg:#f4f6f5;
+  --green:#1e7f43;
+  --green2:#0f5f2f;
+  --white:#fff;
+  --text:#111;
+  --muted:#6b7280;
+  --shadow: 0 10px 24px rgba(0,0,0,.15);
+  --radius:16px;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
 body{
-margin:0;
-font-family:'Hind Siliguri', sans-serif;
-background:#f4f6f5;
+  margin:0;
+  font-family:'Hind Siliguri', sans-serif;
+  background:var(--bg);
+  color:var(--text);
 }
 
+#map{ height: 62vh; width:100%; }
+
+/* Topbar */
 .topbar{
-position:fixed;
-top:0;
-left:0;
-right:0;
-background:#1e7f43;
-color:white;
-display:flex;
-justify-content:space-between;
-padding:12px;
-z-index:1000;
+  position:fixed; top:10px; left:10px; right:10px;
+  z-index:1200;
+  display:flex; gap:10px; align-items:center;
+}
+.brandBtn{
+  display:flex; gap:8px; align-items:center;
+  border:none; background:rgba(255,255,255,.95);
+  border-radius:999px; padding:10px 12px;
+  box-shadow:var(--shadow); cursor:pointer;
+}
+.brandLogo{font-size:18px}
+.brandText{font-weight:900; font-size:12px; line-height:1.05}
+
+.searchWrap{
+  flex:1; display:flex; align-items:center; gap:8px;
+  background:rgba(255,255,255,.95);
+  border-radius:999px; padding:10px 12px;
+  box-shadow:var(--shadow);
+}
+.searchIcon{opacity:.7}
+.searchInput{
+  border:none; outline:none; width:100%;
+  font-size:14px; font-family:'Hind Siliguri', sans-serif;
+  background:transparent;
 }
 
-#map{
-height:60vh;
-margin-top:60px;
+.pillBtn{
+  border:none; background:var(--green);
+  color:#fff; padding:10px 12px; border-radius:999px;
+  cursor:pointer; box-shadow:var(--shadow); font-weight:900;
 }
 
-.addBtn{
-position:fixed;
-bottom:20px;
-right:20px;
-background:#f39c12;
-color:white;
-border:none;
-padding:12px 15px;
-border-radius:30px;
-font-weight:700;
-cursor:pointer;
+/* Pills */
+.statsRow{
+  position:fixed; top:70px; left:10px; right:10px;
+  z-index:1100;
+  display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+}
+.statPill{
+  background:rgba(255,255,255,.95);
+  border-radius:999px; padding:8px 10px;
+  font-weight:900; font-size:13px;
+  box-shadow:var(--shadow);
+}
+.statPill.ok{ background:#e9f7ef; }
+
+.countdownPill{
+  background:var(--green2);
+  color:#fff;
+  border-radius:999px; padding:8px 10px;
+  font-weight:1000; font-size:13px;
+  box-shadow:var(--shadow);
 }
 
-#list{
-padding:15px;
+.hintText{
+  width:100%;
+  margin-top:2px;
+  font-size:12px;
+  color:rgba(255,255,255,.95);
+  text-shadow:0 2px 8px rgba(0,0,0,.35);
+  padding-left:2px;
 }
 
+/* Floating add button */
+.fab{
+  position:fixed; right:14px; bottom:170px;
+  z-index:1300;
+  border:none; background:#f39c12; color:#fff;
+  padding:12px 14px; border-radius:999px;
+  font-weight:1000; cursor:pointer;
+  box-shadow:var(--shadow);
+}
+
+/* Bottom sheet */
+.sheet{
+  position:fixed; left:0; right:0; bottom:0;
+  z-index:1250;
+  background:var(--green);
+  border-radius:20px 20px 0 0;
+  box-shadow:var(--shadow);
+  padding:10px 12px 14px;
+  height:42vh;
+  display:flex; flex-direction:column;
+}
+.sheetHandle{
+  width:60px; height:6px;
+  background:rgba(255,255,255,.6);
+  border-radius:999px;
+  margin:6px auto 10px;
+}
+.sheetHeader{
+  display:flex; justify-content:space-between;
+  align-items:center; gap:10px; color:#fff;
+}
+.sheetTitleMain{font-size:16px; font-weight:1000}
+.sheetTitleSub{font-size:12px; opacity:.9}
+
+.ghostBtn{
+  border:1px solid rgba(255,255,255,.35);
+  background:transparent; color:#fff;
+  padding:8px 10px; border-radius:999px;
+  cursor:pointer; font-weight:900;
+}
+.ghostBtn.dark{
+  border:1px solid #e5e7eb;
+  color:#111;
+}
+
+.sheetList{
+  margin-top:10px;
+  overflow:auto;
+  padding-right:2px;
+}
+
+/* Cards */
 .card{
-background:white;
-padding:12px;
-border-radius:12px;
-margin-bottom:10px;
+  background:#fff;
+  border-radius:var(--radius);
+  padding:12px;
+  margin-bottom:10px;
+}
+.cardTop{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:10px;
+}
+.cardTitle{font-weight:1000; font-size:15px; line-height:1.25}
+.cardSub{font-size:12px; color:var(--muted); margin-top:2px}
+.smallPill{
+  font-size:12px; font-weight:1000;
+  padding:6px 8px; border-radius:999px;
+  background:#f3f4f6;
+}
+
+.tags{ margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; }
+.tag{
+  background:#e6f4ea;
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:900;
+}
+
+.voteRow{
+  display:flex;
+  gap:8px;
+  margin-top:10px;
+  flex-wrap:wrap;
+}
+.voteBtn{
+  border:none;
+  border-radius:999px;
+  padding:8px 10px;
+  cursor:pointer;
+  font-weight:1000;
+  background:#f3f4f6;
+}
+.voteBtn.disabled{
+  opacity:.55;
+  cursor:not-allowed;
+}
+
+/* Modal */
+.modalBackdrop{
+  position:fixed; inset:0;
+  background:rgba(0,0,0,.45);
+  z-index:2000;
+}
+.modal{
+  position:fixed;
+  left:10px; right:10px; top:90px;
+  z-index:2100;
+  background:#fff;
+  border-radius:18px;
+  box-shadow:var(--shadow);
+  padding:12px;
+}
+.modalHeader{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:10px;
+}
+.modalTitle{font-weight:1000; font-size:16px}
+.modalSub{font-size:12px; color:var(--muted); margin-top:2px}
+.form{margin-top:10px}
+.lbl{display:block; font-size:13px; font-weight:1000; margin:10px 0 6px}
+.inp{
+  width:100%;
+  padding:12px;
+  border-radius:14px;
+  border:1px solid #e5e7eb;
+  outline:none;
+  font-family:'Hind Siliguri', sans-serif;
+  font-size:14px;
+}
+.infoBox{
+  margin-top:8px;
+  background:#f3f4f6;
+  border-radius:14px;
+  padding:10px;
+  font-size:12px;
+  color:#111;
+  font-weight:900;
+}
+.latlngRow{
+  margin-top:10px;
+  display:flex;
+  gap:10px;
+  align-items:center;
+  justify-content:space-between;
+}
+.latlngPill{
+  flex:1;
+  background:#f3f4f6;
+  border-radius:999px;
+  padding:10px 12px;
+  font-weight:1000;
+  font-size:12px;
+}
+.primaryBtn{
+  width:100%;
+  margin-top:12px;
+  border:none;
+  background:var(--green);
+  color:#fff;
+  border-radius:14px;
+  padding:12px 14px;
+  font-weight:1000;
+  cursor:pointer;
+}
+.tinyNote{
+  margin-top:8px;
+  font-size:11px;
+  color:var(--muted);
+}
+
+@media (min-width:900px){
+  #map{height:70vh}
+  .sheet{left:calc(50% - 240px); right:calc(50% - 240px); width:480px; border-radius:20px}
+  .topbar,.statsRow{left:calc(50% - 240px); right:calc(50% - 240px); width:480px}
+  .modal{left:calc(50% - 240px); right:calc(50% - 240px); width:480px}
+  .fab{right:calc(50% - 240px + 14px)}
 }
