@@ -1,47 +1,95 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="bn">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>রাজশাহী ইফতার</title>
 
-  <!-- Font -->
-  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Bangla Font: Hind Siliguri -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
 
-  <!-- Leaflet -->
+  <!-- Leaflet CSS -->
   <link
     rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
   />
 
-  <!-- App Style -->
-  <link rel="stylesheet" href="style.css" />
+  <!-- App CSS -->
+  <link rel="stylesheet" href="./style.css" />
 </head>
 
 <body>
 
-  <!-- 🌙 Top Header -->
-  <div class="topHeader">
-    🌙 রাজশাহী ইফতার
-  </div>
+  <!-- =========================
+       TOP BAR
+  ========================== -->
+  <header class="topbar">
+    <div class="brand">🌙 রাজশাহী ইফতার</div>
 
-  <!-- 🗺️ Map -->
+    <div class="countdownPill">
+      <span class="label">ইফতার বাকি</span>
+      <span id="countdown" class="time">--</span>
+    </div>
+  </header>
+
+  <!-- =========================
+       MAP
+  ========================== -->
   <div id="map"></div>
 
-  <!-- ➕ Add Spot Floating Button -->
-  <button id="addSpotFab">＋</button>
+  <!-- =========================
+       ADD SPOT FLOATING BUTTON
+  ========================== -->
+  <button
+    id="addSpotBtn"
+    class="addSpotBtn"
+    title="স্পট যোগ করুন"
+    aria-label="স্পট যোগ করুন"
+  >
+    ➕
+  </button>
 
-  <!-- 📍 Add Spot Modal -->
-  <div id="addSpotModal" class="modal hidden">
+  <!-- =========================
+       BOTTOM SHEET
+  ========================== -->
+  <section
+    id="sheet"
+    class="sheet"
+    aria-label="আজকের সক্রিয় ইফতার"
+  >
+    <div
+      id="sheetHandle"
+      class="sheetHandle"
+      aria-label="drag handle"
+    ></div>
+
+    <div class="sheetHeader">
+      <div class="sheetTitle">🍽️ আজকের সক্রিয় ইফতার</div>
+      <div class="sheetMeta">
+        <span id="spotCount">0</span>টি
+      </div>
+    </div>
+
+    <!-- List (cards render from app.js) -->
+    <div id="list" class="list">
+      <div class="empty">কোনো স্পট নেই</div>
+    </div>
+  </section>
+
+  <!-- =========================
+       ADD SPOT MODAL
+  ========================== -->
+  <div id="addSpotModal" class="modal hidden" aria-label="ইফতার স্পট যোগ করুন">
     <div class="modalCard">
 
       <div class="modalHeader">
         <div>
-          <div class="mhTitle">📍 ইফতার স্পট যোগ করুন</div>
-          <div class="mhSub">উম্মাকে ইফতার খুঁজে পেতে সাহায্য করুন</div>
+          <div class="modalTitle">📍 ইফতার স্পট যোগ করুন</div>
+          <div class="modalSub">উম্মাকে ইফতার খুঁজে পেতে সাহায্য করুন</div>
         </div>
-        <button id="closeModal" class="mhClose">✕</button>
+        <button id="closeModal" class="modalClose" aria-label="Close">✕</button>
       </div>
 
       <div class="modalBody">
@@ -51,35 +99,26 @@
         <label>এলাকা *</label>
         <input id="spotArea" placeholder="উদাহরণ: কাজলা, রাজশাহী" />
 
-        <div class="pickRow">
-          <button id="pickLocationBtn">📍 ম্যাপ থেকে লোকেশন দিন</button>
-          <div id="pickedLatLng">লোকেশন নির্বাচন হয়নি</div>
+        <div class="pinRow">
+          <div id="pickedLatLng" class="pinText">📍 ম্যাপ থেকে লোকেশন দিন</div>
+          <button id="pickLocationBtn" class="pinBtn">ম্যাপ থেকে দিন</button>
         </div>
 
-        <button id="submitSpotBtn" class="submitBtn">
-          স্পট যোগ করুন
-        </button>
+        <button id="submitSpotBtn" class="submitBtn">স্পট যোগ করুন</button>
       </div>
 
     </div>
   </div>
 
-  <!-- 📜 Bottom Sheet -->
-  <div id="bottomSheet">
-    <div class="sheetHandle"></div>
-    <div class="sheetHeader">
-      🍽️ আজকের সক্রিয় ইফতার
-    </div>
-    <div id="spotList" class="sheetList">
-      <div class="empty">কোনো স্পট নেই</div>
-    </div>
-  </div>
+  <!-- =========================
+       SCRIPTS
+  ========================== -->
 
   <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-  <!-- App Logic -->
-  <script type="module" src="app.js"></script>
+  <!-- App JS (module) -->
+  <script type="module" src="./app.js"></script>
 
 </body>
 </html>
