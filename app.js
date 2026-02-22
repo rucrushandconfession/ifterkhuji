@@ -1,14 +1,13 @@
 // =============================
-// app.js (FULL REPLACE - FIXED + PREMIUM POPUP)
+// app.js (FULL REPLACE - UI MATCH FIX)
 // Project: free-ifter (Rajshahi Iftar)
 // - Rajshahi locked map
 // - Iftar countdown (Rajshahi Maghrib)
 // - Smooth bottom sheet drag
-// - Add spot modal + map click pick (FIXED: modal no longer blocks map)
+// - Add spot modal + map click pick (modal no longer blocks map)
 // - Firestore spots load + add
 // - Voting (truth/fake) 1 per user (docId spotId_uid)
-// - Premium popup like your 2nd screenshot (green header + votes)
-// - Auth "signing..." stuck fix (await ensureAuthReady)
+// - UI: Card header green + body white (like your 2nd pic)
 // =============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -242,7 +241,7 @@ onAuthStateChanged(auth, (u) => {
 });
 
 /* =============================
-   6) Helpers + Premium Popup HTML
+   6) Data + Map markers
 ============================= */
 let spots = [];
 let markerLayer = L.layerGroup().addTo(map);
@@ -256,65 +255,8 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
-function timeAgoFromTimestamp(ts) {
-  try {
-    if (!ts) return "এইমাত্র";
-    const d = ts?.toDate ? ts.toDate() : new Date(ts);
-    const diff = Date.now() - d.getTime();
-    const m = Math.floor(diff / 60000);
-    if (m < 1) return "এইমাত্র";
-    if (m < 60) return `${m} মিনিট আগে`;
-    const h = Math.floor(m / 60);
-    if (h < 24) return `${h} ঘন্টা আগে`;
-    const day = Math.floor(h / 24);
-    return `${day} দিন আগে`;
-  } catch {
-    return "এইমাত্র";
-  }
-}
-
-function buildPremiumPopupHTML(spot) {
-  const title = escapeHtml(spot.name || "");
-  const area = escapeHtml(spot.area || "");
-  const truth = spot.truthCount ?? 0;
-  const fake = spot.fakeCount ?? 0;
-
-  const author = "User";
-  const timeAgo = timeAgoFromTimestamp(spot.createdAt);
-
-  return `
-  <div class="pPopup">
-    <div class="pHead">
-      <div class="pHeadRow">
-        <div class="pAuthor">👤 ${author}</div>
-        <div class="pBadge">✓ নিশ্চিত</div>
-      </div>
-      <div class="pTitle">${title}</div>
-    </div>
-
-    <div class="pBody">
-      <div class="pMetaRow">
-        <div class="pMeta">📍 ${area}</div>
-        <div class="pMeta">🕒 ${timeAgo}</div>
-      </div>
-
-      <div class="pVotes">
-        <button class="pVote good" data-id="${spot.id}" data-v="truth" ${authReady ? "" : "disabled"}>
-          👍 <span>${truth}</span> সত্যি
-        </button>
-        <button class="pVote bad" data-id="${spot.id}" data-v="fake" ${authReady ? "" : "disabled"}>
-          👎 <span>${fake}</span> ভুয়া
-        </button>
-      </div>
-    </div>
-  </div>
-  `;
-}
-
-/* =============================
-   7) Load Spots + Votes
-============================= */
 async function loadSpotsAndVotes() {
+  // spots
   const spotSnap = await getDocs(collection(db, "spots"));
   const newSpots = [];
   spotSnap.forEach((d) => {
@@ -328,6 +270,7 @@ async function loadSpotsAndVotes() {
     });
   });
 
+  // votes
   const voteSnap = await getDocs(collection(db, "votes"));
   const votesBySpot = new Map();
 
@@ -340,7 +283,9 @@ async function loadSpotsAndVotes() {
 
   for (const s of newSpots) {
     const arr = votesBySpot.get(s.id) || [];
-    let t = 0, f = 0, my = null;
+    let t = 0,
+      f = 0,
+      my = null;
 
     for (const v of arr) {
       if (v.value === "truth") t++;
@@ -356,55 +301,33 @@ async function loadSpotsAndVotes() {
   spots = newSpots;
 }
 
-/* =============================
-   8) Markers + Premium Popup
-============================= */
 function renderMarkers() {
   markerLayer.clearLayers();
 
   for (const s of spots) {
     if (typeof s.lat !== "number" || typeof s.lng !== "number") continue;
-
     const m = L.marker([s.lat, s.lng]);
-
-    m.bindPopup(buildPremiumPopupHTML(s), {
-      className: "premiumPopup",
-      closeButton: true,
-      autoPan: true,
-      offset: [0, -10],
-    });
-
-    m.on("popupopen", (ev) => {
-      const root = ev.popup.getElement();
-      if (!root) return;
-
-      const attachHandlers = () => {
-        root.querySelectorAll(".pVote").forEach((btn) => {
-          btn.addEventListener("click", async () => {
-            const spotId = btn.getAttribute("data-id");
-            const value = btn.getAttribute("data-v");
-
-            await castVote(spotId, value);
-
-            const updated = spots.find((x) => x.id === spotId);
-            if (updated) {
-              ev.popup.setContent(buildPremiumPopupHTML(updated));
-              setTimeout(attachHandlers, 0);
-            }
-          });
-        });
-      };
-
-      attachHandlers();
-    });
-
+    m.bindPopup(`<b>${escapeHtml(s.name)}</b><br/>${escapeHtml(s.area)}`);
     markerLayer.addLayer(m);
   }
 }
 
 /* =============================
-   9) Render List (Bottom Sheet)
+   6.5) Badge logic (like “✔ নিশ্চিত”)
 ============================= */
+function getBadge(truth, fake) {
+  const t = Number(truth || 0);
+  const f = Number(fake || 0);
+
+  // You can tune rules:
+  // - “নিশ্চিত”: truth >= 1 and truth >= fake
+  // - “ভুয়া”: fake > truth
+  // - “নতুন”: no votes
+  if (t === 0 && f === 0) return { text: "নতুন", cls: "neutral", icon: "⏳" };
+  if (f > t) return { text: "ভুয়া", cls: "bad", icon: "⚠️" };
+  return { text: "নিশ্চিত", cls: "good", icon: "✓" };
+}
+
 function renderList() {
   countEl.textContent = String(spots.length);
 
@@ -417,21 +340,34 @@ function renderList() {
     .map((s) => {
       const truth = s.truthCount ?? 0;
       const fake = s.fakeCount ?? 0;
+      const badge = getBadge(truth, fake);
 
       return `
       <div class="card">
-        <div class="icon">🍽️</div>
-        <div class="main">
+        <div class="cardHeader">
+          <div class="cardUser">👤 User</div>
+          <div class="cardBadge ${badge.cls}">
+            <span class="bIcon">${badge.icon}</span> ${badge.text}
+          </div>
+        </div>
+
+        <div class="cardBody">
           <div class="title">${escapeHtml(s.name || "")}</div>
-          <div class="meta">📍 ${escapeHtml(s.area || "")}</div>
+          <div class="meta">
+            <span>📍 ${escapeHtml(s.area || "")}</span>
+          </div>
 
           <div class="voteRow">
-            <button class="voteBtn good ${s.myVote === "truth" ? "active" : ""}"
+            <button class="voteBtn good ${
+              s.myVote === "truth" ? "active" : ""
+            }"
               data-id="${s.id}" data-v="truth" ${authReady ? "" : "disabled"}>
               👍 ${truth} সত্যি
             </button>
 
-            <button class="voteBtn bad ${s.myVote === "fake" ? "active" : ""}"
+            <button class="voteBtn bad ${
+              s.myVote === "fake" ? "active" : ""
+            }"
               data-id="${s.id}" data-v="fake" ${authReady ? "" : "disabled"}>
               👎 ${fake} ভুয়া
             </button>
@@ -452,7 +388,7 @@ function renderList() {
 }
 
 /* =============================
-   10) Voting (1 per user)
+   7) Voting (1 per user)
 ============================= */
 async function castVote(spotId, value) {
   try {
@@ -475,9 +411,7 @@ async function castVote(spotId, value) {
   if (value === "fake") s.fakeCount = (s.fakeCount || 0) + 1;
 
   s.myVote = value;
-
   renderList();
-  renderMarkers();
 
   try {
     await setDoc(doc(db, "votes", voteId), {
@@ -493,7 +427,7 @@ async function castVote(spotId, value) {
 }
 
 /* =============================
-   11) Add Spot Modal + Map Pick
+   8) Add Spot Modal + Map Pick (FIXED)
 ============================= */
 let pickMode = false;
 let pickedLatLng = null;
@@ -501,7 +435,7 @@ let pickPreviewMarker = null;
 
 function closeModal() {
   modal?.classList.add("hidden");
-  modal?.classList.remove("pickMode");
+  modal?.classList.remove("pickMode"); // always remove
 
   pickMode = false;
   pickedLatLng = null;
@@ -521,19 +455,23 @@ addSpotBtn?.addEventListener("click", () => {
 
 closeModalBtn?.addEventListener("click", closeModal);
 
+// Enable pick mode: modal stops blocking map clicks
 pickLocationBtn?.addEventListener("click", () => {
   pickMode = true;
   modal?.classList.add("pickMode");
+
   if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
 });
 
+// Map click: select lat/lng
 map.on("click", (e) => {
   if (!pickMode) return;
 
   const { lat, lng } = e.latlng;
 
   if (!isInRajshahi(lat, lng)) {
-    if (pickedLatLngEl) pickedLatLngEl.textContent = "⚠️ রাজশাহীর ভিতরে লোকেশন দিন";
+    if (pickedLatLngEl)
+      pickedLatLngEl.textContent = "⚠️ রাজশাহীর ভিতরে লোকেশন দিন";
     return;
   }
 
@@ -553,6 +491,7 @@ map.on("click", (e) => {
 submitSpotBtn?.addEventListener("click", submitSpot);
 
 async function submitSpot() {
+  // Wait auth (no stuck)
   submitSpotBtn.disabled = true;
   submitSpotBtn.textContent = "সাইনিং হচ্ছে…";
 
@@ -604,6 +543,7 @@ async function submitSpot() {
       createdAt: serverTimestamp(),
     });
 
+    // optimistic add
     spots.unshift({
       id: docRef.id,
       name,
@@ -620,6 +560,7 @@ async function submitSpot() {
     renderMarkers();
     renderList();
 
+    // reset + close
     if (spotNameEl) spotNameEl.value = "";
     if (spotAreaEl) spotAreaEl.value = "";
     closeModal();
@@ -632,7 +573,7 @@ async function submitSpot() {
 }
 
 /* =============================
-   12) Refresh + Boot
+   9) Refresh
 ============================= */
 async function refreshAll() {
   await loadSpotsAndVotes();
@@ -640,6 +581,9 @@ async function refreshAll() {
   renderList();
 }
 
+/* =============================
+   10) Boot
+============================= */
 (async function boot() {
   try {
     await loadSpotsAndVotes();
