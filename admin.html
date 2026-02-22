@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Admin Dashboard — ইফতার খুঁজুন</title>
   <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+
   <style>
     body{font-family:'Hind Siliguri',sans-serif;margin:16px;background:#f4f6f5;color:#111}
     h2,h3{margin:10px 0}
@@ -12,15 +13,13 @@
     button{border:0;border-radius:12px;padding:10px 12px;font-weight:800;cursor:pointer}
     .ok{background:#1e7f43;color:#fff}
     .no{background:#c0392b;color:#fff}
-    .soft{background:#e5e7eb;color:#111}
     .card{background:#fff;border-radius:14px;padding:12px;margin:10px 0;box-shadow:0 10px 20px rgba(0,0,0,.08)}
-    .muted{opacity:.8;font-size:12px;font-weight:700}
+    .muted{opacity:.75;font-size:12px;font-weight:700}
+    .pill{display:inline-block;background:#f3f4f6;border-radius:999px;padding:6px 10px;font-weight:800;font-size:12px;margin-right:6px;margin-top:6px}
     .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
     @media (max-width:600px){ .grid{grid-template-columns:1fr} }
     .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
-    .pill{display:inline-block;background:#f3f4f6;border-radius:999px;padding:6px 10px;font-weight:800;font-size:12px;margin-right:6px;margin-top:6px}
-    .mono{font-family:ui-monospace, Menlo, Consolas, monospace;}
-    a{color:#1e7f43;text-decoration:none;font-weight:900}
+    a{color:#1e7f43;text-decoration:none;font-weight:800}
   </style>
 </head>
 
@@ -29,23 +28,17 @@
 
   <div class="bar">
     <button id="login" class="ok">Google Login</button>
-    <button id="logout" class="soft">Logout</button>
+    <span class="muted" id="who">Not logged in</span>
     <a href="./index.html">← Public Site</a>
   </div>
 
-  <div class="card">
-    <div class="muted">Status</div>
-    <div id="statusText">Not logged in</div>
-    <div class="muted">UID: <span class="mono" id="uidText">—</span></div>
-    <div class="muted">Email: <span class="mono" id="emailText">—</span></div>
-    <div class="muted">Admin Check: <span id="adminText">—</span></div>
-  </div>
-
-  <div class="grid">
+  <div class="grid" style="margin-top:12px;">
     <div class="card"><b>Pending</b><div class="muted" id="mPending">0</div></div>
     <div class="card"><b>Approved</b><div class="muted" id="mApproved">0</div></div>
-    <div class="card"><b>Reports</b><div class="muted" id="mReports">0</div></div>
+    <div class="card"><b>Reports Total</b><div class="muted" id="mReports">0</div></div>
     <div class="card"><b>Total Visits</b><div class="muted" id="mVisits">0</div></div>
+    <div class="card"><b>Online Now</b><div class="muted" id="mOnline">0</div></div>
+    <div class="card"><b>Top Areas</b><div class="muted" id="mAreas">—</div></div>
   </div>
 
   <h3>Pending Queue</h3>
@@ -54,14 +47,14 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
     import {
-      getFirestore, collection, onSnapshot, doc, getDoc,
-      setDoc, deleteDoc, serverTimestamp
+      getFirestore, collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
     import {
-      getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
+      getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
+    // ✅ Same Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyA6SZeKVmNAsd4eAlieCTC7zQzYMenwJEA",
       authDomain: "free-ifter.firebaseapp.com",
@@ -78,87 +71,91 @@
     const provider = new GoogleAuthProvider();
 
     const loginBtn = document.getElementById("login");
-    const logoutBtn = document.getElementById("logout");
-    const statusText = document.getElementById("statusText");
-    const uidText = document.getElementById("uidText");
-    const emailText = document.getElementById("emailText");
-    const adminText = document.getElementById("adminText");
+    const who = document.getElementById("who");
     const pendingEl = document.getElementById("pending");
 
     const mPending = document.getElementById("mPending");
     const mApproved = document.getElementById("mApproved");
     const mReports = document.getElementById("mReports");
     const mVisits = document.getElementById("mVisits");
+    const mOnline = document.getElementById("mOnline");
+    const mAreas = document.getElementById("mAreas");
 
-    let currentUser = null;
-    let isAdmin = false;
+    let user = null;
 
-    loginBtn.onclick = async () => { await signInWithPopup(auth, provider); };
-    logoutBtn.onclick = async () => { await signOut(auth); };
-
-    onSnapshot(collection(db,"spots_pending"), (snap)=>{ mPending.textContent = snap.size; });
-    onSnapshot(collection(db,"spots_approved"), (snap)=>{ mApproved.textContent = snap.size; });
-    onSnapshot(collection(db,"reports"), (snap)=>{ mReports.textContent = snap.size; });
-    onSnapshot(doc(db,"stats","global"), (snap)=>{ mVisits.textContent = snap.exists()? (snap.data().totalVisits||0):0; });
+    loginBtn.onclick = async () => {
+      try { await signInWithPopup(auth, provider); }
+      catch (e) { alert("Login cancel/failed"); }
+    };
 
     onAuthStateChanged(auth, async (u) => {
-      currentUser = u;
-      isAdmin = false;
+      user = u;
+      who.textContent = user ? `Logged: ${user.email || user.uid}` : "Not logged in";
+    });
 
-      if (!u) {
-        statusText.textContent = "Not logged in";
-        uidText.textContent = "—";
-        emailText.textContent = "—";
-        adminText.textContent = "—";
-        pendingEl.innerHTML = `<div class="card"><b>Login করুন</b></div>`;
+    // Counters
+    onSnapshot(collection(db,"spots_pending"), (snap)=>{ mPending.textContent = snap.size; });
+
+    onSnapshot(collection(db,"spots_approved"), (snap)=>{
+      mApproved.textContent = snap.size;
+
+      const counts = {};
+      snap.forEach(d=>{
+        const a = (d.data()?.area || "Unknown").trim();
+        counts[a] = (counts[a]||0) + 1;
+      });
+
+      const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
+      mAreas.textContent = top.length ? top.map(([k,v])=>`${k} (${v})`).join(" • ") : "—";
+    });
+
+    onSnapshot(collection(db,"reports"), (snap)=>{ mReports.textContent = snap.size; });
+    onSnapshot(doc(db,"stats","global"), (snap)=>{ mVisits.textContent = Number(snap.data()?.totalVisits || 0); });
+
+    onSnapshot(collection(db,"presence"), (snap)=>{
+      const now = Date.now();
+      let online = 0;
+      snap.forEach(d=>{
+        const ms = d.data()?.lastSeen?.toMillis ? d.data().lastSeen.toMillis() : 0;
+        if (ms && now - ms <= 2*60*1000) online++;
+      });
+      mOnline.textContent = online;
+    });
+
+    // Pending list + Approve/Reject
+    onSnapshot(collection(db, "spots_pending"), async (snap) => {
+      pendingEl.innerHTML = "";
+
+      if (!user) {
+        pendingEl.innerHTML = `<div class="card"><b>Login করুন</b><div class="muted">Google login করে approve/reject করুন</div></div>`;
         return;
       }
 
-      statusText.textContent = "Logged in ✅";
-      uidText.textContent = u.uid;
-      emailText.textContent = u.email || "—";
-
-      const adminSnap = await getDoc(doc(db,"admins", u.uid));
-      isAdmin = adminSnap.exists();
-      adminText.textContent = isAdmin ? "✅ Admin OK" : "❌ Not Admin";
-
-      if (!isAdmin){
-        pendingEl.innerHTML = `<div class="card"><b>Admin access নেই</b><div class="pill mono">${u.uid}</div></div>`;
+      const adminSnap = await getDoc(doc(db,"admins", user.uid));
+      if (!adminSnap.exists()) {
+        pendingEl.innerHTML = `<div class="card"><b>❌ Admin নয়</b><div class="muted">Firestore এ admins/${user.uid} doc তৈরি করুন</div></div>`;
+        return;
       }
-    });
 
-    // Render pending queue
-    onSnapshot(collection(db,"spots_pending"), async (snap) => {
-      if (!currentUser || !isAdmin) return;
-
-      pendingEl.innerHTML = "";
-      if (snap.empty){
+      if (snap.empty) {
         pendingEl.innerHTML = `<div class="card"><b>✅ Pending নেই</b></div>`;
         return;
       }
 
       snap.forEach((d) => {
-        const s = d.data() || {};
-        const id = d.id;
-
-        const latNum = Number(s.lat);
-        const lngNum = Number(s.lng);
-        const latTxt = Number.isFinite(latNum) ? latNum.toFixed(5) : "N/A";
-        const lngTxt = Number.isFinite(lngNum) ? lngNum.toFixed(5) : "N/A";
-
+        const s = d.data();
         const div = document.createElement("div");
         div.className = "card";
         div.innerHTML = `
-          <b>${esc(s.name||"")}</b>
-          <div class="muted">${esc(s.area||"")} • ${esc(s.type||"")}</div>
+          <b>${escapeHtml(s.name)}</b>
+          <div class="muted">${escapeHtml(s.area)} • ${escapeHtml(s.type)}</div>
           <div class="row">
-            <span class="pill">lat: ${latTxt}</span>
-            <span class="pill">lng: ${lngTxt}</span>
-            <span class="pill mono">Doc: ${id}</span>
+            <span class="pill">lat: ${Number(s.lat).toFixed(5)}</span>
+            <span class="pill">lng: ${Number(s.lng).toFixed(5)}</span>
           </div>
           <div class="row">
-            <button class="ok" data-id="${id}" data-act="approve">Approve</button>
-            <button class="no" data-id="${id}" data-act="reject">Reject</button>
+            <button class="ok" data-id="${d.id}" data-act="approve">Approve</button>
+            <button class="no" data-id="${d.id}" data-act="reject">Reject</button>
           </div>
         `;
         pendingEl.appendChild(div);
@@ -168,42 +165,49 @@
     pendingEl.addEventListener("click", async (e) => {
       const btn = e.target.closest("button");
       if (!btn) return;
-      if (!currentUser || !isAdmin) return alert("Admin login করুন");
+
+      if (!user) return alert("Login করুন।");
+      const adminSnap = await getDoc(doc(db,"admins", user.uid));
+      if (!adminSnap.exists()) return alert("Admin নয়।");
 
       const id = btn.dataset.id;
       const act = btn.dataset.act;
 
-      const pendingRef = doc(db,"spots_pending", id);
+      const pendingRef = doc(db, "spots_pending", id);
 
-      try{
-        if (act === "approve"){
-          const snap = await getDoc(pendingRef);
-          const data = snap.data();
-          if (!data) return alert("Pending ডাটা নেই");
+      if (act === "approve") {
+        const snap = await getDoc(pendingRef);
+        const data = snap.data();
+        if (!data) return;
 
-          await setDoc(doc(db,"spots_approved", id), {
-            ...data,
-            status:"approved",
-            truthCount: 0,
-            fakeCount: 0,
-            approvedBy: currentUser.uid,
-            approvedAt: serverTimestamp()
-          });
+        // ✅ Move to approved (same doc id)
+        await setDoc(doc(db, "spots_approved", id), {
+          ...data,
+          status: "approved",
+          truthCount: 0,
+          fakeCount: 0,
+          reportsCount: 0,
+          approvedBy: user.uid,
+          approvedAt: serverTimestamp()
+        });
 
-          await deleteDoc(pendingRef);
-          alert("✅ Approved & Live!");
-        } else {
-          await deleteDoc(pendingRef);
-          alert("🗑️ Rejected");
-        }
-      }catch(err){
-        console.error(err);
-        alert("❌ " + (err?.message||""));
+        await deleteDoc(pendingRef);
+        alert("✅ Approved & Live!");
+      }
+
+      if (act === "reject") {
+        await deleteDoc(pendingRef);
+        alert("🗑️ Rejected");
       }
     });
 
-    function esc(t){
-      return String(t).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+    function escapeHtml(str) {
+      return String(str || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
     }
   </script>
 </body>
