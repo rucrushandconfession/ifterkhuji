@@ -11,16 +11,23 @@
   <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
 
   <!-- Leaflet CSS -->
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-  />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
   <!-- App CSS -->
   <link rel="stylesheet" href="./style.css" />
 </head>
 
 <body>
+
+  <!-- ✅ LOADING OVERLAY (NEW) -->
+  <div id="loadingOverlay" class="loadingOverlay" aria-label="লোডিং">
+    <div class="loadingCard">
+      <div class="loadingIcon">🍽️</div>
+      <div class="loadingTitle">রাজশাহীর ফ্রি ইফতার ম্যাপ লোড হচ্ছে…</div>
+      <div class="loadingSub">দয়া করে একটু অপেক্ষা করুন</div>
+      <div class="loadingBar"><span></span></div>
+    </div>
+  </div>
 
   <!-- =========================
        TOP BAR
@@ -72,7 +79,6 @@
       </div>
     </div>
 
-    <!-- List (cards render from app.js) -->
     <div id="list" class="list">
       <div class="empty">কোনো স্পট নেই</div>
     </div>
@@ -113,11 +119,7 @@
   <!-- =========================
        SCRIPTS
   ========================== -->
-
-  <!-- Leaflet JS -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-  <!-- App JS (module) -->
   <script type="module" src="./app.js"></script>
 
 </body>
