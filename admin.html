@@ -13,13 +13,17 @@
     button{border:0;border-radius:12px;padding:10px 12px;font-weight:800;cursor:pointer}
     .ok{background:#1e7f43;color:#fff}
     .no{background:#c0392b;color:#fff}
+    .soft{background:#e5e7eb;color:#111}
     .card{background:#fff;border-radius:14px;padding:12px;margin:10px 0;box-shadow:0 10px 20px rgba(0,0,0,.08)}
-    .muted{opacity:.75;font-size:12px;font-weight:700}
+    .muted{opacity:.8;font-size:12px;font-weight:700}
     .pill{display:inline-block;background:#f3f4f6;border-radius:999px;padding:6px 10px;font-weight:800;font-size:12px;margin-right:6px;margin-top:6px}
     .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
     @media (max-width:600px){ .grid{grid-template-columns:1fr} }
     .row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
     a{color:#1e7f43;text-decoration:none;font-weight:800}
+    .danger{color:#c0392b;font-weight:900}
+    .oktxt{color:#1e7f43;font-weight:900}
+    .mono{font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;}
   </style>
 </head>
 
@@ -28,8 +32,16 @@
 
   <div class="bar">
     <button id="login" class="ok">Google Login</button>
-    <span class="muted" id="who">Not logged in</span>
+    <button id="logout" class="soft">Logout</button>
     <a href="./index.html">← Public Site</a>
+  </div>
+
+  <div class="card">
+    <div class="muted">Status</div>
+    <div id="statusText">Not logged in</div>
+    <div class="muted">UID: <span class="mono" id="uidText">—</span></div>
+    <div class="muted">Email: <span class="mono" id="emailText">—</span></div>
+    <div class="muted">Admin Check: <span id="adminText" class="danger">Not checked</span></div>
   </div>
 
   <div class="grid" style="margin-top:12px;">
@@ -47,14 +59,15 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
     import {
-      getFirestore, collection, onSnapshot, doc, getDoc, setDoc, deleteDoc, serverTimestamp
+      getFirestore, collection, onSnapshot, doc, getDoc,
+      setDoc, deleteDoc, serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
 
     import {
-      getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged
+      getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
     } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
 
-    // ✅ Same Firebase config
+    // ✅ Firebase config (same as site)
     const firebaseConfig = {
       apiKey: "AIzaSyA6SZeKVmNAsd4eAlieCTC7zQzYMenwJEA",
       authDomain: "free-ifter.firebaseapp.com",
@@ -70,8 +83,13 @@
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
 
+    // UI refs
     const loginBtn = document.getElementById("login");
-    const who = document.getElementById("who");
+    const logoutBtn = document.getElementById("logout");
+    const statusText = document.getElementById("statusText");
+    const uidText = document.getElementById("uidText");
+    const emailText = document.getElementById("emailText");
+    const adminText = document.getElementById("adminText");
     const pendingEl = document.getElementById("pending");
 
     const mPending = document.getElementById("mPending");
@@ -81,21 +99,26 @@
     const mOnline = document.getElementById("mOnline");
     const mAreas = document.getElementById("mAreas");
 
-    let user = null;
+    let currentUser = null;
+    let isAdmin = false;
 
     loginBtn.onclick = async () => {
-      try { await signInWithPopup(auth, provider); }
-      catch (e) { alert("Login cancel/failed"); }
+      try {
+        await signInWithPopup(auth, provider);
+      } catch (e) {
+        console.error(e);
+        alert("Login failed/cancelled");
+      }
     };
 
-    onAuthStateChanged(auth, async (u) => {
-      user = u;
-      who.textContent = user ? `Logged: ${user.email || user.uid}` : "Not logged in";
-    });
+    logoutBtn.onclick = async () => {
+      try {
+        await signOut(auth);
+      } catch {}
+    };
 
-    // Counters
+    // Analytics counters (সবাই দেখতে পারবে)
     onSnapshot(collection(db,"spots_pending"), (snap)=>{ mPending.textContent = snap.size; });
-
     onSnapshot(collection(db,"spots_approved"), (snap)=>{
       mApproved.textContent = snap.size;
 
@@ -104,11 +127,9 @@
         const a = (d.data()?.area || "Unknown").trim();
         counts[a] = (counts[a]||0) + 1;
       });
-
       const top = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,5);
       mAreas.textContent = top.length ? top.map(([k,v])=>`${k} (${v})`).join(" • ") : "—";
     });
-
     onSnapshot(collection(db,"reports"), (snap)=>{ mReports.textContent = snap.size; });
     onSnapshot(doc(db,"stats","global"), (snap)=>{ mVisits.textContent = Number(snap.data()?.totalVisits || 0); });
 
@@ -122,20 +143,64 @@
       mOnline.textContent = online;
     });
 
-    // Pending list + Approve/Reject
+    // Main auth flow
+    onAuthStateChanged(auth, async (u) => {
+      currentUser = u;
+      isAdmin = false;
+
+      if (!u) {
+        statusText.textContent = "Not logged in";
+        uidText.textContent = "—";
+        emailText.textContent = "—";
+        adminText.textContent = "Not checked";
+        adminText.className = "danger";
+        pendingEl.innerHTML = `<div class="card"><b>Login করুন</b><div class="muted">Google login করে Approve/Reject করুন</div></div>`;
+        return;
+      }
+
+      // Logged
+      statusText.textContent = "Logged in ✅";
+      uidText.textContent = u.uid;
+      emailText.textContent = u.email || "—";
+
+      console.log("ADMIN USER:", { uid: u.uid, email: u.email });
+
+      // Admin check
+      try {
+        const adminSnap = await getDoc(doc(db, "admins", u.uid));
+        isAdmin = adminSnap.exists();
+
+        if (!isAdmin) {
+          adminText.textContent = "❌ Not admin (admins/UID doc missing)";
+          adminText.className = "danger";
+          pendingEl.innerHTML = `
+            <div class="card">
+              <b>❌ Admin access নেই</b>
+              <div class="muted">Firestore → admins → Document ID হিসেবে এই UID দিন:</div>
+              <div class="pill mono">${u.uid}</div>
+              <div class="muted">Field দিন: ok = true (boolean)</div>
+            </div>
+          `;
+          return;
+        }
+
+        adminText.textContent = "✅ Admin OK";
+        adminText.className = "oktxt";
+      } catch (e) {
+        console.error("Admin check error:", e);
+        adminText.textContent = "❌ Admin check failed";
+        adminText.className = "danger";
+        pendingEl.innerHTML = `<div class="card"><b>Admin check error</b><div class="muted">${escapeHtml(e?.message||"")}</div></div>`;
+        return;
+      }
+    });
+
+    // Pending list live
     onSnapshot(collection(db, "spots_pending"), async (snap) => {
+      if (!currentUser) return;
+      if (!isAdmin) return;
+
       pendingEl.innerHTML = "";
-
-      if (!user) {
-        pendingEl.innerHTML = `<div class="card"><b>Login করুন</b><div class="muted">Google login করে approve/reject করুন</div></div>`;
-        return;
-      }
-
-      const adminSnap = await getDoc(doc(db,"admins", user.uid));
-      if (!adminSnap.exists()) {
-        pendingEl.innerHTML = `<div class="card"><b>❌ Admin নয়</b><div class="muted">Firestore এ admins/${user.uid} doc তৈরি করুন</div></div>`;
-        return;
-      }
 
       if (snap.empty) {
         pendingEl.innerHTML = `<div class="card"><b>✅ Pending নেই</b></div>`;
@@ -146,58 +211,65 @@
         const s = d.data();
         const div = document.createElement("div");
         div.className = "card";
+
         div.innerHTML = `
           <b>${escapeHtml(s.name)}</b>
           <div class="muted">${escapeHtml(s.area)} • ${escapeHtml(s.type)}</div>
           <div class="row">
             <span class="pill">lat: ${Number(s.lat).toFixed(5)}</span>
             <span class="pill">lng: ${Number(s.lng).toFixed(5)}</span>
+            <span class="pill mono">Doc: ${d.id}</span>
           </div>
           <div class="row">
             <button class="ok" data-id="${d.id}" data-act="approve">Approve</button>
             <button class="no" data-id="${d.id}" data-act="reject">Reject</button>
           </div>
         `;
+
         pendingEl.appendChild(div);
       });
     });
 
+    // Approve/Reject click
     pendingEl.addEventListener("click", async (e) => {
       const btn = e.target.closest("button");
       if (!btn) return;
 
-      if (!user) return alert("Login করুন।");
-      const adminSnap = await getDoc(doc(db,"admins", user.uid));
-      if (!adminSnap.exists()) return alert("Admin নয়।");
+      if (!currentUser) return alert("Login করুন");
+      if (!isAdmin) return alert("Admin access নেই");
 
       const id = btn.dataset.id;
       const act = btn.dataset.act;
 
       const pendingRef = doc(db, "spots_pending", id);
 
-      if (act === "approve") {
-        const snap = await getDoc(pendingRef);
-        const data = snap.data();
-        if (!data) return;
+      try {
+        if (act === "approve") {
+          const snap = await getDoc(pendingRef);
+          const data = snap.data();
+          if (!data) return alert("Pending ডাটা পাওয়া যায়নি");
 
-        // ✅ Move to approved (same doc id)
-        await setDoc(doc(db, "spots_approved", id), {
-          ...data,
-          status: "approved",
-          truthCount: 0,
-          fakeCount: 0,
-          reportsCount: 0,
-          approvedBy: user.uid,
-          approvedAt: serverTimestamp()
-        });
+          await setDoc(doc(db, "spots_approved", id), {
+            ...data,
+            status: "approved",
+            truthCount: 0,
+            fakeCount: 0,
+            reportsCount: 0,
+            approvedBy: currentUser.uid,
+            approvedAt: serverTimestamp()
+          });
 
-        await deleteDoc(pendingRef);
-        alert("✅ Approved & Live!");
-      }
+          await deleteDoc(pendingRef);
+          alert("✅ Approved & Live!");
+        }
 
-      if (act === "reject") {
-        await deleteDoc(pendingRef);
-        alert("🗑️ Rejected");
+        if (act === "reject") {
+          await deleteDoc(pendingRef);
+          alert("🗑️ Rejected");
+        }
+      } catch (err) {
+        console.error("Approve/reject error:", err);
+        alert("❌ Error: " + (err?.message || "Unknown"));
       }
     });
 
