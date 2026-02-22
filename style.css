@@ -1,49 +1,45 @@
 :root{
+  --bg:#f4f6f5;
   --green:#1e7f43;
   --green2:#0f5f2f;
-  --bg:#f4f6f5;
-  --card:#ffffff;
+  --white:#fff;
   --text:#111;
   --muted:#6b7280;
-  --glass:rgba(255,255,255,.65);
-  --shadow:0 12px 30px rgba(0,0,0,.15);
-  --radius:18px;
-}
-
-@media (prefers-color-scheme: dark){
-  :root{
-    --bg:#0f172a;
-    --card:#1e293b;
-    --text:#f1f5f9;
-    --muted:#94a3b8;
-    --glass:rgba(30,41,59,.7);
-    --shadow:0 12px 30px rgba(0,0,0,.5);
-  }
+  --shadow:0 10px 24px rgba(0,0,0,.15);
+  --radius:16px;
 }
 
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
+html,body{height:100%}
+
+/* ✅ iPhone text auto zoom বন্ধ */
+html{ -webkit-text-size-adjust:100%; }
+
 body{
   margin:0;
-  font-family:'Hind Siliguri',sans-serif;
+  font-family:'Hind Siliguri', sans-serif;
   background:var(--bg);
   color:var(--text);
   overflow-x:hidden;
 }
 
-/* stop iOS zoom */
-input,select,textarea{font-size:16px}
+/* ✅ Input zoom fix (iOS) */
+input, select, textarea{
+  font-size:16px;
+}
 
-/* MAP */
+/* ================= MAP ================= */
 #map{
-  height:62dvh;
+  height:62dvh;   /* dvh = mobile stable */
   width:100%;
 }
 
-/* TOP BAR */
+/* ================= TOP BAR ================= */
 .topbar{
   position:fixed;
-  top:10px;left:10px;right:10px;
+  top:10px;
+  left:10px;
+  right:10px;
   z-index:1200;
   display:flex;
   gap:10px;
@@ -55,53 +51,56 @@ input,select,textarea{font-size:16px}
   gap:8px;
   align-items:center;
   border:none;
-  backdrop-filter:blur(14px);
-  background:var(--glass);
+  background:rgba(255,255,255,.95);
   border-radius:999px;
-  padding:10px 14px;
+  padding:10px 12px;
   box-shadow:var(--shadow);
   cursor:pointer;
 }
 
-.brandText{font-weight:800;font-size:12px;line-height:1.1}
+.brandLogo{font-size:18px}
+.brandText{
+  font-weight:800;
+  font-size:12px;
+  line-height:1.1;
+}
 
 .searchWrap{
   flex:1;
   display:flex;
   align-items:center;
   gap:8px;
-  backdrop-filter:blur(14px);
-  background:var(--glass);
+  background:rgba(255,255,255,.95);
   border-radius:999px;
-  padding:10px 14px;
+  padding:10px 12px;
   box-shadow:var(--shadow);
 }
 
 .searchInput{
   border:none;
   outline:none;
-  background:transparent;
   width:100%;
-  font-family:'Hind Siliguri',sans-serif;
-  color:var(--text);
+  background:transparent;
+  font-family:'Hind Siliguri', sans-serif;
 }
 
 .pillBtn{
   border:none;
   background:var(--green);
   color:#fff;
-  padding:10px 14px;
+  padding:10px 12px;
   border-radius:999px;
-  font-weight:700;
   cursor:pointer;
   box-shadow:var(--shadow);
+  font-weight:700;
 }
 
-/* CHIPS */
+/* ================= CHIPS ================= */
 .chipsRow{
   position:fixed;
   top:60px;
-  left:10px;right:10px;
+  left:10px;
+  right:10px;
   z-index:1150;
   display:flex;
   gap:8px;
@@ -110,42 +109,51 @@ input,select,textarea{font-size:16px}
 }
 
 .chip{
-  backdrop-filter:blur(12px);
-  background:var(--glass);
+  border:1px solid rgba(255,255,255,.6);
+  background:rgba(255,255,255,.92);
   border-radius:999px;
-  padding:8px 12px;
+  padding:8px 10px;
   font-weight:700;
   font-size:12px;
   cursor:pointer;
-  box-shadow:var(--shadow);
   white-space:nowrap;
+  box-shadow:var(--shadow);
 }
 
 .chip.active{
   background:var(--green);
   color:#fff;
+  border-color:var(--green);
 }
 
-/* STATS */
+/* ================= STATS ================= */
 .statsRow{
   position:fixed;
   top:110px;
-  left:10px;right:10px;
+  left:10px;
+  right:10px;
   z-index:1100;
   display:flex;
   flex-wrap:wrap;
   gap:8px;
+  align-items:center;
 }
 
 .statPill,
 .countdownPill{
-  backdrop-filter:blur(14px);
-  background:var(--glass);
   border-radius:999px;
-  padding:8px 12px;
+  padding:8px 10px;
   font-weight:700;
   font-size:13px;
   box-shadow:var(--shadow);
+}
+
+.statPill{
+  background:rgba(255,255,255,.95);
+}
+
+.statPill.ok{
+  background:#e9f7ef;
 }
 
 .countdownPill{
@@ -153,7 +161,14 @@ input,select,textarea{font-size:16px}
   color:#fff;
 }
 
-/* FAB */
+.hintText{
+  width:100%;
+  font-size:12px;
+  color:white;
+  text-shadow:0 2px 8px rgba(0,0,0,.4);
+}
+
+/* ================= FLOAT BUTTON ================= */
 .fab{
   position:fixed;
   right:14px;
@@ -162,51 +177,53 @@ input,select,textarea{font-size:16px}
   border:none;
   background:#f39c12;
   color:#fff;
-  padding:12px 16px;
+  padding:12px 14px;
   border-radius:999px;
   font-weight:800;
   cursor:pointer;
   box-shadow:var(--shadow);
 }
 
-/* BOTTOM SHEET */
+/* ================= BOTTOM SHEET ================= */
 .sheet{
   position:fixed;
-  left:0;right:0;bottom:0;
+  left:0;
+  right:0;
+  bottom:0;
   z-index:1250;
-  backdrop-filter:blur(20px);
-  background:var(--glass);
-  border-radius:24px 24px 0 0;
+  background:var(--green);
+  border-radius:20px 20px 0 0;
   box-shadow:var(--shadow);
-  padding:14px;
+  padding:10px 12px 14px;
   height:42dvh;
   display:flex;
   flex-direction:column;
   transition:height .15s ease;
+  -webkit-overflow-scrolling:touch;
 }
 
 .sheetHandle{
   width:60px;
   height:6px;
-  background:var(--muted);
+  background:rgba(255,255,255,.6);
   border-radius:999px;
-  margin:6px auto 14px;
+  margin:6px auto 10px;
   cursor:grab;
 }
 
 .sheetList{
+  margin-top:10px;
   overflow:auto;
   -webkit-overflow-scrolling:touch;
   touch-action:pan-y;
 }
 
-/* CARD */
+/* ================= CARD ================= */
 .card{
-  background:var(--card);
+  background:#fff;
   border-radius:var(--radius);
-  padding:14px;
-  margin-bottom:12px;
-  box-shadow:0 8px 20px rgba(0,0,0,.08);
+  padding:12px;
+  margin-bottom:10px;
 }
 
 .cardTitle{
@@ -220,7 +237,7 @@ input,select,textarea{font-size:16px}
 }
 
 .tag{
-  background:rgba(30,127,67,.15);
+  background:#e6f4ea;
   padding:4px 8px;
   border-radius:999px;
   font-size:12px;
@@ -230,17 +247,19 @@ input,select,textarea{font-size:16px}
 .voteBtn{
   border:none;
   border-radius:999px;
-  padding:8px 12px;
-  font-weight:700;
+  padding:8px 10px;
   cursor:pointer;
-  background:#e5e7eb;
+  font-weight:700;
+  background:#f3f4f6;
 }
 
-/* FOOTER */
+/* ================= FOOTER ================= */
 .footer{
   position:fixed;
-  left:10px;right:10px;
+  left:10px;
+  right:10px;
   bottom:6px;
+  z-index:1400;
   display:flex;
   justify-content:space-between;
   gap:10px;
@@ -248,23 +267,32 @@ input,select,textarea{font-size:16px}
 
 .footerText,
 .vPill{
-  backdrop-filter:blur(14px);
-  background:var(--glass);
+  background:rgba(255,255,255,.92);
   border-radius:999px;
-  padding:8px 12px;
+  padding:8px 10px;
   font-weight:700;
   font-size:12px;
   box-shadow:var(--shadow);
 }
 
-/* MODAL */
+/* ================= MODAL ================= */
+.modalBackdrop{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.45);
+  z-index:2000;
+}
+
 .modal{
   position:fixed;
-  left:10px;right:10px;top:90px;
-  background:var(--card);
-  border-radius:20px;
+  left:10px;
+  right:10px;
+  top:90px;
+  z-index:2100;
+  background:#fff;
+  border-radius:18px;
   box-shadow:var(--shadow);
-  padding:14px;
+  padding:12px;
 }
 
 .inp{
@@ -272,8 +300,8 @@ input,select,textarea{font-size:16px}
   padding:12px;
   border-radius:14px;
   border:1px solid #e5e7eb;
-  background:transparent;
-  color:var(--text);
+  outline:none;
+  font-family:'Hind Siliguri', sans-serif;
 }
 
 .primaryBtn{
@@ -283,12 +311,12 @@ input,select,textarea{font-size:16px}
   background:var(--green);
   color:#fff;
   border-radius:14px;
-  padding:12px;
+  padding:12px 14px;
   font-weight:800;
   cursor:pointer;
 }
 
-/* DESKTOP */
+/* ================= DESKTOP FIX ================= */
 @media (min-width:900px){
   #map{height:70vh}
   .sheet{left:calc(50% - 240px);right:calc(50% - 240px);width:480px}
