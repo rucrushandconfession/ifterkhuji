@@ -318,3 +318,39 @@ body{
     font-size: 13px;
   }
 }
+/* =========================
+   ADD SPOT FLOATING BUTTON
+========================= */
+
+.addSpotBtn{
+  position: fixed;
+  right: 18px;
+  bottom: 110px; /* bottom sheet এর উপর থাকবে */
+  z-index: 1400;
+
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+
+  border: none;
+  cursor: pointer;
+
+  background: linear-gradient(135deg, #2f6b3a, #275130);
+  color: #fff;
+
+  font-size: 26px;
+  font-weight: 900;
+  font-family: "Hind Siliguri", system-ui;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  box-shadow: 0 10px 22px rgba(2,6,23,0.25);
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.addSpotBtn:active{
+  transform: scale(0.95);
+  box-shadow: 0 6px 14px rgba(2,6,23,0.25);
+}
