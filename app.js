@@ -294,3 +294,44 @@ const addSpotBtn = document.getElementById("addSpotBtn");
 addSpotBtn.addEventListener("click", () => {
   alert("স্পট যোগ করার ফর্ম পরের ধাপে যুক্ত হবে 🙂");
 });
+/* =========================
+   ADD SPOT MODAL LOGIC
+========================= */
+
+const addSpotBtn = document.getElementById("addSpotBtn");
+const modal = document.getElementById("addSpotModal");
+const closeModal = document.getElementById("closeModal");
+
+const pickBtn = document.getElementById("pickLocationBtn");
+const pickedText = document.getElementById("pickedLatLng");
+
+let pickedLatLng = null;
+let pickMode = false;
+
+// open modal
+addSpotBtn.addEventListener("click", () => {
+  modal.classList.remove("hidden");
+});
+
+// close modal
+closeModal.addEventListener("click", () => {
+  modal.classList.add("hidden");
+  pickMode = false;
+});
+
+// enable pick mode
+pickBtn.addEventListener("click", () => {
+  pickMode = true;
+  alert("ম্যাপে ট্যাপ করে রাজশাহীর ভিতরের লোকেশন সিলেক্ট করুন");
+});
+
+// map click handler (use your existing map)
+map.on("click", (e) => {
+  if (!pickMode) return;
+
+  pickedLatLng = e.latlng;
+  pickMode = false;
+
+  pickedText.textContent =
+    `📍 ${pickedLatLng.lat.toFixed(5)}, ${pickedLatLng.lng.toFixed(5)}`;
+});
