@@ -1,7 +1,11 @@
 // =============================
-// app.js (FULL REPLACE - Loading screen + existing features)
-// - Shows loading overlay on first load
-// - Hides overlay when map tiles + data loaded
+// app.js (FULL REPLACE - Your requested changes)
+// ✅ Loading overlay on entry
+// ✅ Food pin by "ইফতারের ধরণ" (biriyani/chinese/mixed)
+// ✅ Map click anywhere -> open add form + auto set location
+// ✅ Pick mode blur stays (for button pick)
+// ✅ Premium popup kept
+// ✅ Save iftarType in Firestore + show in popup/list
 // =============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -24,7 +28,7 @@ import {
    0) Firebase Config
 ============================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyA6SZeKVmNAsd4eAlieCTC7zQzYMenwJEA",
+  apiKey: "AIzaSyA6SZeKVmNAsd4eAlieCTC7zYMenwJEA",
   authDomain: "free-ifter.firebaseapp.com",
   projectId: "free-ifter",
   storageBucket: "free-ifter.firebasestorage.app",
@@ -41,16 +45,11 @@ let me = null;
 let authReady = false;
 
 /* =============================
-   ✅ Loading Overlay helpers
+   Loading overlay
 ============================= */
 const loadingOverlay = document.getElementById("loadingOverlay");
-function showLoading() {
-  loadingOverlay?.classList.remove("hidden");
-}
-function hideLoading() {
-  loadingOverlay?.classList.add("hidden");
-}
-// show immediately
+const showLoading = () => loadingOverlay?.classList.remove("hidden");
+const hideLoading = () => loadingOverlay?.classList.add("hidden");
 showLoading();
 
 /* =============================
@@ -221,6 +220,8 @@ const closeModalBtn = document.getElementById("closeModal");
 
 const spotNameEl = document.getElementById("spotName");
 const spotAreaEl = document.getElementById("spotArea");
+const iftarTypeEl = document.getElementById("iftarType");
+
 const pickLocationBtn = document.getElementById("pickLocationBtn");
 const pickedLatLngEl = document.getElementById("pickedLatLng");
 const submitSpotBtn = document.getElementById("submitSpotBtn");
@@ -268,6 +269,20 @@ function getBadge(truth, fake) {
   return { text: "নিশ্চিত", cls: "good", icon: "✓" };
 }
 
+function typeLabel(t) {
+  if (t === "biriyani") return "বিরিয়ানি";
+  if (t === "chinese") return "চাইনিজ";
+  if (t === "mixed") return "মিশ্র";
+  return "মিশ্র";
+}
+
+function typeEmoji(t) {
+  if (t === "biriyani") return "🍛";
+  if (t === "chinese") return "🍜";
+  if (t === "mixed") return "🍽️";
+  return "🍽️";
+}
+
 async function loadSpotsAndVotes() {
   const spotSnap = await getDocs(collection(db, "spots"));
   const newSpots = [];
@@ -305,9 +320,108 @@ async function loadSpotsAndVotes() {
     s.truthCount = t;
     s.fakeCount = f;
     s.myVote = my;
+
+    // default type
+    if (!s.iftarType) s.iftarType = "mixed";
   }
 
   spots = newSpots;
+}
+
+/* =============================
+   6.1) Food pin icon (by type)
+============================= */
+function makeFoodPinIcon(iftarType) {
+  const emoji = typeEmoji(iftarType);
+  return L.divIcon({
+    className: "",
+    html: `
+      <div class="foodPin">
+        <div class="foodPinInner">${emoji}</div>
+      </div>
+    `,
+    iconSize: [38, 50],
+    iconAnchor: [19, 48],
+    popupAnchor: [0, -52],
+  });
+}
+
+/* =============================
+   6.2) Premium popup (kept)
+============================= */
+function buildPopupHtml(spot) {
+  const truth = spot.truthCount ?? 0;
+  const fake = spot.fakeCount ?? 0;
+  const badge = getBadge(truth, fake);
+
+  const title = escapeHtml(spot.name || "");
+  const area = escapeHtml(spot.area || "");
+  const tLabel = escapeHtml(typeLabel(spot.iftarType || "mixed"));
+
+  return `
+    <div class="spotCard">
+      <div class="spotCardHeader">
+        <div class="left">
+          <div class="u">👤 <span>User</span></div>
+          <div class="spotName">${title}</div>
+        </div>
+        <div class="badge">${badge.icon} ${badge.text}</div>
+      </div>
+
+      <div class="spotCardBody">
+        <div class="spotRow">
+          <div>📍 ${area}</div>
+          <div style="color:#64748b;font-weight:800;white-space:nowrap;">${typeEmoji(spot.iftarType)} ${tLabel}</div>
+        </div>
+
+        <div class="spotActions">
+          <button class="spotAct good" data-act="truth" data-id="${spot.id}">
+            👍 ${truth} সত্যি
+          </button>
+          <button class="spotAct bad" data-act="fake" data-id="${spot.id}">
+            👎 ${fake} ভুয়া
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+let openedPopup = null;
+function openSpotPopup(latlng, spot) {
+  if (openedPopup) {
+    try { map.closePopup(openedPopup); } catch {}
+    openedPopup = null;
+  }
+
+  const popup = L.popup({
+    className: "spotPopup",
+    closeButton: false,
+    autoPan: true,
+    offset: L.point(0, -10),
+    maxWidth: 360,
+  })
+    .setLatLng(latlng)
+    .setContent(buildPopupHtml(spot));
+
+  openedPopup = popup;
+  popup.openOn(map);
+
+  // bind popup buttons
+  setTimeout(() => {
+    const root = document.querySelector(".leaflet-popup.spotPopup");
+    if (!root) return;
+
+    root.querySelectorAll(".spotAct").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const spotId = btn.getAttribute("data-id");
+        const act = btn.getAttribute("data-act");
+        await castVote(spotId, act);
+      });
+    });
+  }, 0);
 }
 
 function renderMarkers() {
@@ -315,12 +429,18 @@ function renderMarkers() {
 
   for (const s of spots) {
     if (typeof s.lat !== "number" || typeof s.lng !== "number") continue;
-    const m = L.marker([s.lat, s.lng]);
-    m.bindPopup(`<b>${escapeHtml(s.name)}</b><br/>${escapeHtml(s.area)}`);
+
+    const icon = makeFoodPinIcon(s.iftarType || "mixed");
+    const m = L.marker([s.lat, s.lng], { icon });
+
+    m.on("click", () => openSpotPopup([s.lat, s.lng], s));
     markerLayer.addLayer(m);
   }
 }
 
+/* =============================
+   List
+============================= */
 function renderList() {
   countEl.textContent = String(spots.length);
 
@@ -333,9 +453,10 @@ function renderList() {
     const truth = s.truthCount ?? 0;
     const fake = s.fakeCount ?? 0;
     const badge = getBadge(truth, fake);
+    const tLabel = escapeHtml(typeLabel(s.iftarType || "mixed"));
 
     return `
-      <div class="card">
+      <div class="card" data-spot="${s.id}">
         <div class="cardHeader">
           <div class="cardUser">👤 User</div>
           <div class="cardBadge ${badge.cls}">
@@ -345,7 +466,7 @@ function renderList() {
 
         <div class="cardBody">
           <div class="title">${escapeHtml(s.name || "")}</div>
-          <div class="meta">📍 ${escapeHtml(s.area || "")}</div>
+          <div class="meta">📍 ${escapeHtml(s.area || "")} • ${typeEmoji(s.iftarType)} ${tLabel}</div>
 
           <div class="voteRow">
             <button class="voteBtn good ${s.myVote === "truth" ? "active" : ""}"
@@ -363,11 +484,24 @@ function renderList() {
     `;
   }).join("");
 
+  // vote click
   listEl.querySelectorAll(".voteBtn").forEach((btn) => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
       const spotId = btn.getAttribute("data-id");
       const value = btn.getAttribute("data-v");
       await castVote(spotId, value);
+    });
+  });
+
+  // card click -> focus marker + popup
+  listEl.querySelectorAll(".card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const id = card.getAttribute("data-spot");
+      const s = spots.find(x => x.id === id);
+      if (!s) return;
+      map.setView([s.lat, s.lng], Math.max(map.getZoom(), 14), { animate: true });
+      openSpotPopup([s.lat, s.lng], s);
     });
   });
 }
@@ -388,6 +522,7 @@ async function castVote(spotId, value) {
   const s = spots.find((x) => x.id === spotId);
   if (!s) return;
 
+  // optimistic
   if (s.myVote === "truth") s.truthCount = Math.max(0, (s.truthCount || 0) - 1);
   if (s.myVote === "fake") s.fakeCount = Math.max(0, (s.fakeCount || 0) - 1);
 
@@ -396,6 +531,25 @@ async function castVote(spotId, value) {
 
   s.myVote = value;
   renderList();
+
+  if (openedPopup) {
+    try {
+      openedPopup.setContent(buildPopupHtml(s));
+      setTimeout(() => {
+        const root = document.querySelector(".leaflet-popup.spotPopup");
+        if (!root) return;
+        root.querySelectorAll(".spotAct").forEach((btn) => {
+          btn.addEventListener("click", async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const id = btn.getAttribute("data-id");
+            const act = btn.getAttribute("data-act");
+            await castVote(id, act);
+          });
+        });
+      }, 0);
+    } catch {}
+  }
 
   try {
     await setDoc(doc(db, "votes", voteId), {
@@ -412,18 +566,32 @@ async function castVote(spotId, value) {
 
 /* =============================
    8) Add Spot Modal + Map Pick
+   ✅ NEW: map click opens modal + auto sets location
 ============================= */
 let pickMode = false;
 let pickedLatLng = null;
 let pickPreviewMarker = null;
 
+function setPicked(lat, lng) {
+  pickedLatLng = { lat, lng };
+  if (pickedLatLngEl) pickedLatLngEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+  if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
+  pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(iftarTypeEl?.value || "mixed") });
+  markerLayer.addLayer(pickPreviewMarker);
+}
+
+function openModal() {
+  modal?.classList.remove("hidden");
+  syncSubmitBtnState();
+}
+
 function closeModal() {
   modal?.classList.add("hidden");
   modal?.classList.remove("pickMode");
-
   pickMode = false;
-  pickedLatLng = null;
 
+  pickedLatLng = null;
   if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 ম্যাপ থেকে লোকেশন দিন";
 
   if (pickPreviewMarker) {
@@ -433,37 +601,50 @@ function closeModal() {
 }
 
 addSpotBtn?.addEventListener("click", () => {
-  modal?.classList.remove("hidden");
-  syncSubmitBtnState();
+  openModal();
 });
+
 closeModalBtn?.addEventListener("click", closeModal);
 
+// pick mode (kept)
 pickLocationBtn?.addEventListener("click", () => {
   pickMode = true;
   modal?.classList.add("pickMode");
   if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
 });
 
+// ✅ Map click: ALWAYS opens form + sets location (if inside Rajshahi)
 map.on("click", (e) => {
-  if (!pickMode) return;
-
   const { lat, lng } = e.latlng;
 
   if (!isInRajshahi(lat, lng)) {
-    if (pickedLatLngEl) pickedLatLngEl.textContent = "⚠️ রাজশাহীর ভিতরে লোকেশন দিন";
+    // if modal open, show warning text
+    if (!modal?.classList.contains("hidden")) {
+      if (pickedLatLngEl) pickedLatLngEl.textContent = "⚠️ রাজশাহীর ভিতরে লোকেশন দিন";
+    }
     return;
   }
 
-  pickMode = false;
-  modal?.classList.remove("pickMode");
-  pickedLatLng = { lat, lng };
-
-  if (pickedLatLngEl) {
-    pickedLatLngEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  // If pickMode: just pick and keep modal open
+  if (pickMode) {
+    pickMode = false;
+    modal?.classList.remove("pickMode");
+    setPicked(lat, lng);
+    return;
   }
 
+  // Normal click: open form + auto set
+  openModal();
+  setPicked(lat, lng);
+});
+
+// Change preview pin icon when type changes
+iftarTypeEl?.addEventListener("change", () => {
+  if (!pickedLatLng) return;
+  // re-render preview marker icon to match selected type
+  const { lat, lng } = pickedLatLng;
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
-  pickPreviewMarker = L.marker([lat, lng]).bindPopup("নতুন স্পট লোকেশন");
+  pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(iftarTypeEl.value || "mixed") });
   markerLayer.addLayer(pickPreviewMarker);
 });
 
@@ -486,10 +667,11 @@ async function submitSpot() {
 
   const name = (spotNameEl?.value || "").trim();
   const area = (spotAreaEl?.value || "").trim();
+  const iftarType = (iftarTypeEl?.value || "").trim();
 
-  if (!name || !area) {
+  if (!name || !area || !iftarType) {
     submitSpotBtn.disabled = false;
-    submitSpotBtn.textContent = "⚠️ নাম/এলাকা দিন";
+    submitSpotBtn.textContent = "⚠️ সব ঘর পূরণ করুন";
     setTimeout(syncSubmitBtnState, 900);
     return;
   }
@@ -501,6 +683,13 @@ async function submitSpot() {
     return;
   }
 
+  if (!isInRajshahi(pickedLatLng.lat, pickedLatLng.lng)) {
+    submitSpotBtn.disabled = false;
+    submitSpotBtn.textContent = "⚠️ রাজশাহীর ভিতরে দিন";
+    setTimeout(syncSubmitBtnState, 900);
+    return;
+  }
+
   submitSpotBtn.disabled = true;
   submitSpotBtn.textContent = "⏳ সাবমিট হচ্ছে…";
 
@@ -508,6 +697,7 @@ async function submitSpot() {
     const docRef = await addDoc(collection(db, "spots"), {
       name,
       area,
+      iftarType,               // ✅ NEW
       lat: pickedLatLng.lat,
       lng: pickedLatLng.lng,
       createdBy: me.uid,
@@ -518,6 +708,7 @@ async function submitSpot() {
       id: docRef.id,
       name,
       area,
+      iftarType,
       lat: pickedLatLng.lat,
       lng: pickedLatLng.lng,
       createdBy: me.uid,
@@ -532,6 +723,8 @@ async function submitSpot() {
 
     if (spotNameEl) spotNameEl.value = "";
     if (spotAreaEl) spotAreaEl.value = "";
+    if (iftarTypeEl) iftarTypeEl.value = "";
+
     closeModal();
   } catch (e) {
     console.error("Spot submit failed:", e);
@@ -542,7 +735,7 @@ async function submitSpot() {
 }
 
 /* =============================
-   ✅ Refresh + Boot + Loading hide logic
+   9) Refresh + Boot (hide loader when ready)
 ============================= */
 async function refreshAll() {
   await loadSpotsAndVotes();
@@ -550,7 +743,6 @@ async function refreshAll() {
   renderList();
 }
 
-// wait map tiles + data then hide loading
 function waitForTilesLoaded(timeoutMs = 9000) {
   return new Promise((resolve) => {
     let done = false;
@@ -559,29 +751,19 @@ function waitForTilesLoaded(timeoutMs = 9000) {
       done = true;
       resolve(true);
     };
-
-    // if already loaded fast
     tiles.once("load", finish);
-
-    // fallback timeout (so it never stuck)
     setTimeout(finish, timeoutMs);
   });
 }
 
 (async function boot() {
   try {
-    // load data + render quickly
     await refreshAll();
-
-    // wait tiles at least once
     await waitForTilesLoaded();
-
-    // hide loading a tiny bit smooth
     setTimeout(hideLoading, 250);
   } catch (e) {
     console.error("Boot error:", e);
     listEl.innerHTML = `<div class="empty">ডাটা লোড হচ্ছে না</div>`;
-    // still hide loader after a moment, else stuck
     setTimeout(hideLoading, 1200);
   }
 })();
