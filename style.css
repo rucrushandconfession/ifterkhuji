@@ -437,6 +437,22 @@ body{
   background: #fff;
 }
 
+.modalBody .select{
+  transform: translateZ(0);
+  opacity: 1;
+  will-change: transform, opacity;
+  transition: transform 140ms ease, opacity 140ms ease;
+  backface-visibility: hidden;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.modalBody .select:focus,
+.modalBody .select:active{
+  transform: translate3d(0,0,0);
+  opacity: 1;
+}
+
 .modalBody input:focus,
 .modalBody .select:focus{
   border-color: rgba(39,81,48,0.35);
