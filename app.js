@@ -105,16 +105,18 @@ function toMillis(value) {
   return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
-function getLocalTodayString(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
+function getLocalDateStringWithOffset(offset = 0, baseDate = new Date()) {
+  const d = new Date(baseDate);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + offset);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
-function isSpotForToday(spot, todayString = getLocalTodayString()) {
-  const dateValue = spot?.iftarDate;
-  return !dateValue || dateValue === todayString;
+function getLocalTodayString(date = new Date()) {
+  return getLocalDateStringWithOffset(0, date);
 }
 
 function normalizeText(value) {
@@ -361,6 +363,61 @@ const pickLocationBtn = document.getElementById("pickLocationBtn");
 const pickedLatLngEl = document.getElementById("pickedLatLng");
 const submitSpotBtn = document.getElementById("submitSpotBtn");
 const sheetMetaEl = document.querySelector(".sheetMeta");
+const dateChipsEl = document.getElementById("dateChips");
+
+let selectedDayOffset = 0;
+
+function isSpotVisibleForSelectedDate(spot, dayOffset = selectedDayOffset) {
+  const dateValue = spot?.iftarDate;
+  if (dayOffset === 0) {
+    const todayString = getLocalDateStringWithOffset(0);
+    return !dateValue || dateValue === todayString;
+  }
+
+  const targetString = getLocalDateStringWithOffset(dayOffset);
+  return dateValue === targetString;
+}
+
+function applySelectedDateFilter() {
+  spots = allSpots.filter((spot) => isSpotVisibleForSelectedDate(spot, selectedDayOffset));
+  sortSpotsInPlace();
+  spotsById = new Map(spots.map((spot) => [spot.id, spot]));
+}
+
+function syncDateChipState() {
+  if (!dateChipsEl) return;
+  const chips = dateChipsEl.querySelectorAll(".dateChip");
+  for (const chip of chips) {
+    const offset = Number(chip.getAttribute("data-day-offset") || 0);
+    const active = offset === selectedDayOffset;
+    chip.classList.toggle("active", active);
+    chip.setAttribute("aria-pressed", active ? "true" : "false");
+  }
+}
+
+function setupDateChipControl() {
+  if (!dateChipsEl) return;
+
+  dateChipsEl.addEventListener(
+    "click",
+    (e) => {
+      const chip = e.target.closest(".dateChip");
+      if (!chip) return;
+
+      const nextOffset = Number(chip.getAttribute("data-day-offset"));
+      if (!Number.isFinite(nextOffset) || nextOffset === selectedDayOffset) return;
+
+      selectedDayOffset = nextOffset;
+      syncDateChipState();
+      applySelectedDateFilter();
+      renderMarkers();
+      renderList();
+    },
+    { passive: true }
+  );
+
+  syncDateChipState();
+}
 
 /* Near me sort */
 let sortMode = "newest";
@@ -766,10 +823,7 @@ async function loadSpotsAndVotes() {
   }
 
   allSpots = nextSpots;
-  const todayString = getLocalTodayString();
-  spots = allSpots.filter((spot) => isSpotForToday(spot, todayString));
-  sortSpotsInPlace();
-  spotsById = new Map(spots.map((spot) => [spot.id, spot]));
+  applySelectedDateFilter();
 }
 
 /* Pins */
@@ -1180,10 +1234,7 @@ async function submitSpot() {
     };
 
     allSpots.unshift(newSpot);
-    const todayString = getLocalTodayString();
-    spots = allSpots.filter((spot) => isSpotForToday(spot, todayString));
-    sortSpotsInPlace();
-    spotsById = new Map(spots.map((spot) => [spot.id, spot]));
+    applySelectedDateFilter();
 
     if (Array.isArray(firestoreCache.spots)) {
       firestoreCache.spots = [
@@ -1305,6 +1356,7 @@ function waitForTilesLoaded(timeoutMs = 9000) {
 (async function boot() {
   try {
     setupNearMeControl();
+    setupDateChipControl();
     await refreshAll();
 
     const sessionCached = readSessionCache();

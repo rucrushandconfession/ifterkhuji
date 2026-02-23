@@ -217,6 +217,41 @@ body{
   gap: 10px;
 }
 
+
+.dateChips{
+  display:flex;
+  align-items:center;
+  gap: 6px;
+}
+
+.dateChip{
+  border: 1px solid rgba(255,255,255,0.24);
+  background: rgba(255,255,255,0.12);
+  color:#fff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-family: "Hind Siliguri", system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  font-weight: 800;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform .18s ease, opacity .18s ease;
+}
+
+.dateChip.active,
+.dateChip[aria-pressed="true"]{
+  background: rgba(255,255,255,0.24);
+  border-color: rgba(255,255,255,0.34);
+}
+
+.dateChip:active{
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce){
+  .dateChip{ transition: none; }
+}
+
 .sheetMeta{
   background: rgba(255,255,255,0.18);
   border: 1px solid rgba(255,255,255,0.22);
@@ -623,6 +658,8 @@ body{
 
 @media (max-width: 420px){
   .brand{ font-size: 16px; padding: 9px 12px; }
+  .dateChips{ gap: 4px; }
+  .dateChip{ padding: 5px 9px; font-size: 12px; }
   .countdownPill .time{ font-size: 15px; }
   .voteBtn{ padding: 11px 12px; font-size: 13px; }
   .spotCard{ width: 290px; }
