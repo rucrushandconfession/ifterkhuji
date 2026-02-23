@@ -66,12 +66,10 @@ function withTimeout(promise, ms, msg = "Timeout") {
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(t));
 }
 
-/* ✅ safer input read */
 function v(el) {
   return (el?.value || "").trim();
 }
 
-/* ✅ show message on submit button (empty form feedback) */
 function flashBtn(msg, ms = 1100) {
   if (!submitSpotBtn) return;
   submitSpotBtn.disabled = false;
@@ -83,7 +81,7 @@ signInAnonymously(auth).catch((e) => console.error("Anonymous auth error:", e));
 
 /* Map */
 const rajshahiCenter = [24.3745, 88.6042];
-const rajshahiBounds = L.latLngBounds([24.30, 88.50], [24.45, 88.70]);
+const rajshahiBounds = L.latLngBounds([24.3, 88.5], [24.45, 88.7]);
 
 const map = L.map("map", {
   zoomControl: false,
@@ -103,7 +101,7 @@ map.on("drag", () => map.panInsideBounds(rajshahiBounds, { animate: false }));
 setTimeout(() => map.invalidateSize(true), 350);
 
 function isInRajshahi(lat, lng) {
-  return lat >= 24.30 && lat <= 24.45 && lng >= 88.50 && lng <= 88.70;
+  return lat >= 24.3 && lat <= 24.45 && lng >= 88.5 && lng <= 88.7;
 }
 
 /* Countdown */
@@ -130,10 +128,10 @@ async function startCountdown() {
       const m = Math.floor((diff % 3600000) / 60000);
       const s = Math.floor((diff % 60000) / 1000);
 
-      if (countdownEl) countdownEl.textContent = `${h}ঘ ${m}মি ${s}সে`;
+      countdownEl.textContent = `${h}ঘ ${m}মি ${s}সে`;
     }, 1000);
   } catch (e) {
-    if (countdownEl) countdownEl.textContent = "--";
+    countdownEl.textContent = "--";
   }
 }
 startCountdown();
@@ -145,11 +143,9 @@ const MIN_H = Math.round(window.innerHeight * 0.16);
 const MID_H = Math.round(window.innerHeight * 0.42);
 const MAX_H = Math.round(window.innerHeight * 0.86);
 let currentH = MID_H;
-
-if (sheet) sheet.style.height = `${currentH}px`;
+sheet.style.height = `${currentH}px`;
 
 function setSheetHeight(h) {
-  if (!sheet) return;
   currentH = Math.max(MIN_H, Math.min(MAX_H, h));
   sheet.style.height = `${currentH}px`;
 }
@@ -158,7 +154,6 @@ let startY = 0,
   dragging = false;
 
 function onStart(e) {
-  if (!sheet) return;
   dragging = true;
   sheet.style.transition = "none";
   startY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -176,7 +171,6 @@ function onMove(e) {
   setSheetHeight(startH + dy);
 }
 function snapToNearest() {
-  if (!sheet) return;
   const dMin = Math.abs(currentH - MIN_H);
   const dMid = Math.abs(currentH - MID_H);
   const dMax = Math.abs(currentH - MAX_H);
@@ -196,8 +190,8 @@ function onEnd() {
   document.removeEventListener("touchmove", onMove);
   document.removeEventListener("touchend", onEnd);
 }
-handle?.addEventListener("mousedown", onStart);
-handle?.addEventListener("touchstart", onStart, { passive: true });
+handle.addEventListener("mousedown", onStart);
+handle.addEventListener("touchstart", onStart, { passive: true });
 
 /* UI refs */
 const listEl = document.getElementById("list");
@@ -207,16 +201,16 @@ const modal = document.getElementById("addSpotModal");
 const closeModalBtn = document.getElementById("closeModal");
 const spotNameEl = document.getElementById("spotName");
 const spotAreaEl = document.getElementById("spotArea");
-const iftarTypeEl = document.getElementById("iftarType"); // may not exist in some html
+const iftarTypeEl = document.getElementById("iftarType"); // may or may not exist
 const pickLocationBtn = document.getElementById("pickLocationBtn");
 const pickedLatLngEl = document.getElementById("pickedLatLng");
 const submitSpotBtn = document.getElementById("submitSpotBtn");
 
-/* Button state (never show “সাইনিং হচ্ছে…”) */
+/* ✅ Button state: always clickable so empty-form message shows */
 function syncSubmitBtnState() {
   if (!submitSpotBtn) return;
   submitSpotBtn.textContent = "স্পট যোগ করুন";
-  submitSpotBtn.disabled = !auth.currentUser?.uid;
+  submitSpotBtn.disabled = false;
 }
 
 onAuthStateChanged(auth, (u) => {
@@ -274,10 +268,10 @@ async function loadSpotsAndVotes() {
   const voteSnap = await getDocs(collection(db, "votes"));
   const votesBySpot = new Map();
   voteSnap.forEach((d) => {
-    const v = d.data();
-    if (!v?.spotId || !v?.value) return;
-    if (!votesBySpot.has(v.spotId)) votesBySpot.set(v.spotId, []);
-    votesBySpot.get(v.spotId).push(v);
+    const v0 = d.data();
+    if (!v0?.spotId || !v0?.value) return;
+    if (!votesBySpot.has(v0.spotId)) votesBySpot.set(v0.spotId, []);
+    votesBySpot.get(v0.spotId).push(v0);
   });
 
   for (const s of newSpots) {
@@ -403,9 +397,7 @@ function renderMarkers() {
 }
 
 function renderList() {
-  if (countEl) countEl.textContent = String(spots.length);
-
-  if (!listEl) return;
+  countEl.textContent = String(spots.length);
 
   if (!spots.length) {
     listEl.innerHTML = `<div class="empty">কোনো স্পট নেই</div>`;
@@ -511,7 +503,7 @@ let pickMode = false;
 let pickedLatLng = null;
 let pickPreviewMarker = null;
 
-/* ✅ pick toast */
+/* ✅ pick toast (new) */
 let pickToastEl = null;
 function showPickToast() {
   if (pickToastEl) return;
@@ -527,54 +519,43 @@ function hidePickToast() {
 
 function setPicked(lat, lng) {
   pickedLatLng = { lat, lng };
-  if (pickedLatLngEl) {
-    pickedLatLngEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
-  }
+  pickedLatLngEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
-
-  const currentType = v(iftarTypeEl) || "mixed";
-  pickPreviewMarker = L.marker([lat, lng], {
-    icon: makeFoodPinIcon(currentType),
-  });
+  const t = v(iftarTypeEl) || "mixed";
+  pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(t) });
   markerLayer.addLayer(pickPreviewMarker);
 }
 
 function openModal() {
-  if (!modal) return;
   modal.classList.remove("hidden");
   syncSubmitBtnState();
 }
-
 function closeModal() {
-  if (!modal) return;
   modal.classList.add("hidden");
   modal.classList.remove("pickMode");
   modal.classList.remove("picking"); // ✅ ensure pick overlay removed
   pickMode = false;
   pickedLatLng = null;
-  if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 ম্যাপ থেকে লোকেশন দিন";
-
-  hidePickToast();
-
+  pickedLatLngEl.textContent = "📍 ম্যাপ থেকে লোকেশন দিন";
+  hidePickToast(); // ✅
   if (pickPreviewMarker) {
     markerLayer.removeLayer(pickPreviewMarker);
     pickPreviewMarker = null;
   }
 }
 
-addSpotBtn?.addEventListener("click", () => openModal());
-closeModalBtn?.addEventListener("click", closeModal);
+addSpotBtn.addEventListener("click", () => openModal());
+closeModalBtn.addEventListener("click", closeModal);
 
-/* ✅ “ম্যাপ থেকে নিন” => modal hide so map looks clear */
-pickLocationBtn?.addEventListener("click", () => {
+/* ✅ “ম্যাপ থেকে নিন” => map clear (modalCard hide) */
+pickLocationBtn.addEventListener("click", () => {
   pickMode = true;
 
-  // ✅ map clear (requires your CSS for .modal.picking)
-  modal?.classList.add("picking");
-  modal?.classList.remove("pickMode");
+  // ✅ this class is handled in CSS (new)
+  modal.classList.add("picking");
 
-  if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
+  pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
   showPickToast();
 });
 
@@ -582,76 +563,73 @@ map.on("click", (e) => {
   const { lat, lng } = e.latlng;
 
   if (!isInRajshahi(lat, lng)) {
-    if (modal && !modal.classList.contains("hidden")) {
-      if (pickedLatLngEl) pickedLatLngEl.textContent = "⚠️ রাজশাহীর ভিতরে লোকেশন দিন";
+    if (!modal.classList.contains("hidden")) {
+      pickedLatLngEl.textContent = "⚠️ রাজশাহীর ভিতরে লোকেশন দিন";
     }
     return;
   }
 
-  // ✅ if we are in pick mode, just pick and show modal again
+  // ✅ pick mode click: bring modal back + set picked
   if (pickMode) {
     pickMode = false;
-    modal?.classList.remove("picking"); // ✅ bring modal back (CSS hides in picking)
+    modal.classList.remove("picking"); // ✅ show modalCard again
     hidePickToast();
     setPicked(lat, lng);
     return;
   }
 
-  // normal map click => open modal and set picked
   openModal();
   setPicked(lat, lng);
 });
 
-/* iftar type change (safe if element missing) */
 iftarTypeEl?.addEventListener("change", () => {
   if (!pickedLatLng) return;
   const { lat, lng } = pickedLatLng;
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
-  const currentType = v(iftarTypeEl) || "mixed";
-  pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(currentType) });
+  pickPreviewMarker = L.marker([lat, lng], {
+    icon: makeFoodPinIcon(v(iftarTypeEl) || "mixed"),
+  });
   markerLayer.addLayer(pickPreviewMarker);
 });
 
-/* ✅ Submit stuck fix + empty form messages */
+/* ✅ Submit stuck fix */
 let submitting = false;
 
-submitSpotBtn?.addEventListener("click", submitSpot);
+submitSpotBtn.addEventListener("click", submitSpot);
 
 async function submitSpot() {
   if (submitting) return;
   submitting = true;
 
   const failSafe = setTimeout(() => {
-    if (submitSpotBtn) {
-      submitSpotBtn.disabled = false;
-      submitSpotBtn.textContent = "⚠️ নেট সমস্যা (আবার চেষ্টা করুন)";
-    }
+    submitSpotBtn.disabled = false;
+    submitSpotBtn.textContent = "⚠️ নেট সমস্যা (আবার চেষ্টা করুন)";
     submitting = false;
     setTimeout(syncSubmitBtnState, 1500);
   }, 12000);
 
   try {
-    const u = await ensureAuthReady();
-    me = u;
-    authReady = true;
+    // ✅ auth ready না হলেও ইউজার মেসেজ পাবে
+    if (!auth.currentUser?.uid) {
+      flashBtn("⏳ একটু অপেক্ষা করুন...");
+      const u = await ensureAuthReady();
+      me = u;
+      authReady = true;
+    }
 
     const name = v(spotNameEl);
     const area = v(spotAreaEl);
-    const iftarType = v(iftarTypeEl) || "mixed"; // ✅ if select missing, use mixed
+    const iftarType = v(iftarTypeEl) || "mixed";
 
-    // ✅ empty validation: always show message
-    if (!name) return flashBtn("⚠️ স্পটের নাম দিন");
-    if (!area) return flashBtn("⚠️ এলাকা দিন");
-    if (!pickedLatLng) return flashBtn("⚠️ লোকেশন দিন");
-
+    if (!name) return flashBtn("⚠️ স্পটের নাম দিন", 1100);
+    if (!area) return flashBtn("⚠️ এলাকা দিন", 1100);
+    if (!pickedLatLng) return flashBtn("⚠️ লোকেশন দিন", 1100);
     if (!isInRajshahi(pickedLatLng.lat, pickedLatLng.lng)) {
-      return flashBtn("⚠️ রাজশাহীর ভিতরে দিন");
+      return flashBtn("⚠️ রাজশাহীর ভিতরে দিন", 1200);
     }
 
-    if (submitSpotBtn) {
-      submitSpotBtn.disabled = true;
-      submitSpotBtn.textContent = "⏳ সাবমিট হচ্ছে…";
-    }
+    submitSpotBtn.disabled = true;
+    submitSpotBtn.textContent = "⏳ সাবমিট হচ্ছে…";
 
     const docRef = await withTimeout(
       addDoc(collection(db, "spots"), {
@@ -684,19 +662,21 @@ async function submitSpot() {
     renderMarkers();
     renderList();
 
-    if (spotNameEl) spotNameEl.value = "";
-    if (spotAreaEl) spotAreaEl.value = "";
+    spotNameEl.value = "";
+    spotAreaEl.value = "";
     if (iftarTypeEl) iftarTypeEl.value = "";
 
     closeModal();
   } catch (e) {
     console.error("Submit failed:", e);
-    if (submitSpotBtn) submitSpotBtn.disabled = false;
+    submitSpotBtn.disabled = false;
 
     const msg = String(e?.message || "").toLowerCase();
-    if (msg.includes("permission")) flashBtn("⚠️ Permission denied", 1400);
-    else if (msg.includes("timeout")) flashBtn("⚠️ নেট স্লো (আবার চেষ্টা করুন)", 1400);
-    else flashBtn("⚠️ সাবমিট হয়নি (আবার চেষ্টা করুন)", 1400);
+    if (msg.includes("permission")) submitSpotBtn.textContent = "⚠️ Permission denied";
+    else if (msg.includes("timeout")) submitSpotBtn.textContent = "⚠️ নেট স্লো (আবার চেষ্টা করুন)";
+    else submitSpotBtn.textContent = "⚠️ সাবমিট হয়নি (আবার চেষ্টা করুন)";
+
+    setTimeout(syncSubmitBtnState, 1400);
   } finally {
     clearTimeout(failSafe);
     submitting = false;
@@ -732,7 +712,7 @@ function waitForTilesLoaded(timeoutMs = 9000) {
     setTimeout(hideLoading, 250);
   } catch (e) {
     console.error("Boot error:", e);
-    if (listEl) listEl.innerHTML = `<div class="empty">ডাটা লোড হচ্ছে না</div>`;
+    listEl.innerHTML = `<div class="empty">ডাটা লোড হচ্ছে না</div>`;
     setTimeout(hideLoading, 1200);
   }
 })();
