@@ -70,6 +70,20 @@ function v(el) {
   return (el?.value || "").trim();
 }
 
+function debounce(fn, wait = 150) {
+  let t = null;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), wait);
+  };
+}
+
+let nextRaf = 0;
+function rafOnce(fn) {
+  cancelAnimationFrame(nextRaf);
+  nextRaf = requestAnimationFrame(fn);
+}
+
 signInAnonymously(auth).catch((e) => console.error("Anonymous auth error:", e));
 
 /* Map */
@@ -92,6 +106,11 @@ const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", 
 
 map.on("drag", () => map.panInsideBounds(rajshahiBounds, { animate: false }));
 setTimeout(() => map.invalidateSize(true), 350);
+window.addEventListener(
+  "resize",
+  debounce(() => map.invalidateSize(), 180),
+  { passive: true }
+);
 
 function isInRajshahi(lat, lng) {
   return lat >= 24.3 && lat <= 24.45 && lng >= 88.5 && lng <= 88.7;
@@ -121,9 +140,11 @@ async function startCountdown() {
       const m = Math.floor((diff % 3600000) / 60000);
       const s = Math.floor((diff % 60000) / 1000);
 
-      countdownEl.textContent = `${h}ঘ ${m}মি ${s}সে`;
+      rafOnce(() => {
+        countdownEl.textContent = `${h}ঘ ${m}মি ${s}সে`;
+      });
     }, 1000);
-  } catch (e) {
+  } catch {
     countdownEl.textContent = "--";
   }
 }
@@ -140,11 +161,13 @@ sheet.style.height = `${currentH}px`;
 
 function setSheetHeight(h) {
   currentH = Math.max(MIN_H, Math.min(MAX_H, h));
-  sheet.style.height = `${currentH}px`;
+  rafOnce(() => {
+    sheet.style.height = `${currentH}px`;
+  });
 }
-let startY = 0,
-  startH = 0,
-  dragging = false;
+let startY = 0;
+let startH = 0;
+let dragging = false;
 
 function onStart(e) {
   dragging = true;
@@ -154,7 +177,7 @@ function onStart(e) {
   document.addEventListener("mousemove", onMove);
   document.addEventListener("mouseup", onEnd);
   document.addEventListener("touchmove", onMove, { passive: false });
-  document.addEventListener("touchend", onEnd);
+  document.addEventListener("touchend", onEnd, { passive: true });
 }
 function onMove(e) {
   if (!dragging) return;
@@ -203,7 +226,6 @@ const submitSpotBtn = document.getElementById("submitSpotBtn");
 function syncSubmitBtnState() {
   if (!submitSpotBtn) return;
   submitSpotBtn.textContent = "স্পট যোগ করুন";
-  // ✅ always clickable so empty-form message can show
   submitSpotBtn.disabled = false;
 }
 
@@ -234,12 +256,10 @@ function flashBtn(msg, ms = 1200) {
   submitSpotBtn.disabled = false;
   submitSpotBtn.textContent = msg;
 
-  // ✅ shake effect (CSS .shake)
   submitSpotBtn.classList.remove("shake");
-  void submitSpotBtn.offsetWidth; // reflow
+  submitSpotBtn.offsetWidth;
   submitSpotBtn.classList.add("shake");
 
-  // ✅ important: if we returned early, allow clicking again
   submitting = false;
 
   setTimeout(() => {
@@ -250,7 +270,16 @@ function flashBtn(msg, ms = 1200) {
 
 /* Data */
 let spots = [];
-let markerLayer = L.layerGroup().addTo(map);
+let spotsById = new Map();
+const markerLayer = L.layerGroup().addTo(map);
+const markerBySpot = new Map();
+
+const sessionCache = {
+  spots: null,
+  votes: null,
+  at: 0,
+};
+const CACHE_TTL = 15000;
 
 function escapeHtml(str) {
   return String(str || "")
@@ -280,12 +309,33 @@ function typeEmoji(t) {
   return "🍽️";
 }
 
-async function loadSpotsAndVotes() {
-  const spotSnap = await getDocs(collection(db, "spots"));
-  const newSpots = [];
+async function loadSpotsAndVotes(force = false) {
+  const now = Date.now();
+  const canUseCache =
+    !force &&
+    sessionCache.spots &&
+    sessionCache.votes &&
+    now - sessionCache.at <= CACHE_TTL;
+
+  let spotSnap;
+  let voteSnap;
+  if (canUseCache) {
+    spotSnap = sessionCache.spots;
+    voteSnap = sessionCache.votes;
+  } else {
+    [spotSnap, voteSnap] = await Promise.all([
+      getDocs(collection(db, "spots")),
+      getDocs(collection(db, "votes")),
+    ]);
+    sessionCache.spots = spotSnap;
+    sessionCache.votes = voteSnap;
+    sessionCache.at = now;
+  }
+
+  const nextSpots = [];
   spotSnap.forEach((d) => {
     const data = d.data() || {};
-    newSpots.push({
+    nextSpots.push({
       id: d.id,
       ...data,
       truthCount: 0,
@@ -294,32 +344,34 @@ async function loadSpotsAndVotes() {
     });
   });
 
-  const voteSnap = await getDocs(collection(db, "votes"));
   const votesBySpot = new Map();
   voteSnap.forEach((d) => {
-    const v0 = d.data();
-    if (!v0?.spotId || !v0?.value) return;
-    if (!votesBySpot.has(v0.spotId)) votesBySpot.set(v0.spotId, []);
-    votesBySpot.get(v0.spotId).push(v0);
+    const vote = d.data();
+    if (!vote?.spotId || !vote?.value) return;
+    if (!votesBySpot.has(vote.spotId)) votesBySpot.set(vote.spotId, []);
+    votesBySpot.get(vote.spotId).push(vote);
   });
 
-  for (const s of newSpots) {
+  for (const s of nextSpots) {
     const arr = votesBySpot.get(s.id) || [];
-    let t = 0,
-      f = 0,
-      my = null;
-    for (const v0 of arr) {
-      if (v0.value === "truth") t++;
-      if (v0.value === "fake") f++;
-      if (me?.uid && v0.uid === me.uid) my = v0.value;
+    let t = 0;
+    let f = 0;
+    let my = null;
+
+    for (const vote of arr) {
+      if (vote.value === "truth") t++;
+      if (vote.value === "fake") f++;
+      if (me?.uid && vote.uid === me.uid) my = vote.value;
     }
+
     s.truthCount = t;
     s.fakeCount = f;
     s.myVote = my;
     if (!s.iftarType) s.iftarType = "mixed";
   }
 
-  spots = newSpots;
+  spots = nextSpots;
+  spotsById = new Map(spots.map((spot) => [spot.id, spot]));
 }
 
 /* Pins */
@@ -379,9 +431,7 @@ let openedPopup = null;
 
 function openSpotPopup(latlng, spot) {
   if (openedPopup) {
-    try {
-      map.closePopup(openedPopup);
-    } catch {}
+    map.closePopup(openedPopup);
     openedPopup = null;
   }
 
@@ -397,32 +447,76 @@ function openSpotPopup(latlng, spot) {
 
   openedPopup = popup;
   popup.openOn(map);
-
-  setTimeout(() => {
-    const root = document.querySelector(".leaflet-popup.spotPopup");
-    if (!root) return;
-    root.querySelectorAll(".spotAct").forEach((btn) => {
-      btn.addEventListener("click", async (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        const spotId = btn.getAttribute("data-id");
-        const act = btn.getAttribute("data-act");
-        await castVote(spotId, act);
-      });
-    });
-  }, 0);
 }
+
+map.on("popupopen", (ev) => {
+  const root = ev?.popup?._contentNode;
+  if (!root) return;
+  root.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".spotAct");
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const spotId = btn.getAttribute("data-id");
+    const act = btn.getAttribute("data-act");
+    await castVote(spotId, act);
+  });
+});
 
 /* Render */
 function renderMarkers() {
   markerLayer.clearLayers();
+  markerBySpot.clear();
+
   for (const s of spots) {
     if (typeof s.lat !== "number" || typeof s.lng !== "number") continue;
     const icon = makeFoodPinIcon(s.iftarType || "mixed");
-    const m = L.marker([s.lat, s.lng], { icon });
-    m.on("click", () => openSpotPopup([s.lat, s.lng], s));
-    markerLayer.addLayer(m);
+    const marker = L.marker([s.lat, s.lng], { icon });
+    marker.on("click", () => openSpotPopup([s.lat, s.lng], s));
+    marker.addTo(markerLayer);
+    markerBySpot.set(s.id, marker);
   }
+}
+
+function createListCard(s) {
+  const truth = s.truthCount ?? 0;
+  const fake = s.fakeCount ?? 0;
+  const badge = getBadge(truth, fake);
+  const tLabel = escapeHtml(typeLabel(s.iftarType || "mixed"));
+
+  const card = document.createElement("div");
+  card.className = "card";
+  card.setAttribute("data-spot", s.id);
+
+  card.innerHTML = `
+    <div class="cardHeader">
+      <div class="cardUser">👤 User</div>
+      <div class="cardBadge ${badge.cls}">
+        <span>${badge.icon}</span> ${badge.text}
+      </div>
+    </div>
+
+    <div class="cardBody">
+      <div class="title">${escapeHtml(s.name || "")}</div>
+      <div class="meta">📍 ${escapeHtml(s.area || "")} • ${typeEmoji(
+    s.iftarType
+  )} ${tLabel}</div>
+
+      <div class="voteRow">
+        <button class="voteBtn good ${s.myVote === "truth" ? "active" : ""}"
+          data-id="${s.id}" data-v="truth" ${authReady ? "" : "disabled"}>
+          👍 ${truth} সত্যি
+        </button>
+
+        <button class="voteBtn bad ${s.myVote === "fake" ? "active" : ""}"
+          data-id="${s.id}" data-v="fake" ${authReady ? "" : "disabled"}>
+          👎 ${fake} ভুয়া
+        </button>
+      </div>
+    </div>
+  `;
+
+  return card;
 }
 
 function renderList() {
@@ -433,64 +527,31 @@ function renderList() {
     return;
   }
 
-  listEl.innerHTML = spots
-    .map((s) => {
-      const truth = s.truthCount ?? 0;
-      const fake = s.fakeCount ?? 0;
-      const badge = getBadge(truth, fake);
-      const tLabel = escapeHtml(typeLabel(s.iftarType || "mixed"));
+  const frag = document.createDocumentFragment();
+  for (const s of spots) frag.appendChild(createListCard(s));
 
-      return `
-      <div class="card" data-spot="${s.id}">
-        <div class="cardHeader">
-          <div class="cardUser">👤 User</div>
-          <div class="cardBadge ${badge.cls}">
-            <span>${badge.icon}</span> ${badge.text}
-          </div>
-        </div>
-
-        <div class="cardBody">
-          <div class="title">${escapeHtml(s.name || "")}</div>
-          <div class="meta">📍 ${escapeHtml(s.area || "")} • ${typeEmoji(
-        s.iftarType
-      )} ${tLabel}</div>
-
-          <div class="voteRow">
-            <button class="voteBtn good ${s.myVote === "truth" ? "active" : ""}"
-              data-id="${s.id}" data-v="truth" ${authReady ? "" : "disabled"}>
-              👍 ${truth} সত্যি
-            </button>
-
-            <button class="voteBtn bad ${s.myVote === "fake" ? "active" : ""}"
-              data-id="${s.id}" data-v="fake" ${authReady ? "" : "disabled"}>
-              👎 ${fake} ভুয়া
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-    })
-    .join("");
-
-  listEl.querySelectorAll(".voteBtn").forEach((btn) => {
-    btn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      const spotId = btn.getAttribute("data-id");
-      const value = btn.getAttribute("data-v");
-      await castVote(spotId, value);
-    });
-  });
-
-  listEl.querySelectorAll(".card").forEach((card) => {
-    card.addEventListener("click", () => {
-      const id = card.getAttribute("data-spot");
-      const s = spots.find((x) => x.id === id);
-      if (!s) return;
-      map.setView([s.lat, s.lng], Math.max(map.getZoom(), 14), { animate: true });
-      openSpotPopup([s.lat, s.lng], s);
-    });
-  });
+  listEl.replaceChildren(frag);
 }
+
+listEl.addEventListener("click", async (e) => {
+  const voteBtn = e.target.closest(".voteBtn");
+  if (voteBtn) {
+    e.stopPropagation();
+    const spotId = voteBtn.getAttribute("data-id");
+    const value = voteBtn.getAttribute("data-v");
+    await castVote(spotId, value);
+    return;
+  }
+
+  const card = e.target.closest(".card");
+  if (!card) return;
+
+  const id = card.getAttribute("data-spot");
+  const s = spotsById.get(id);
+  if (!s) return;
+  map.setView([s.lat, s.lng], Math.max(map.getZoom(), 14), { animate: true });
+  openSpotPopup([s.lat, s.lng], s);
+});
 
 /* Voting */
 async function castVote(spotId, value) {
@@ -503,7 +564,7 @@ async function castVote(spotId, value) {
   }
 
   const voteId = `${spotId}_${me.uid}`;
-  const s = spots.find((x) => x.id === spotId);
+  const s = spotsById.get(spotId);
   if (!s) return;
 
   if (s.myVote === "truth") s.truthCount = Math.max(0, (s.truthCount || 0) - 1);
@@ -521,9 +582,10 @@ async function castVote(spotId, value) {
       value,
       createdAt: serverTimestamp(),
     });
+    sessionCache.votes = null;
   } catch (e) {
     console.error("Vote write failed:", e);
-    await refreshAll();
+    await refreshAll(true);
   }
 }
 
@@ -537,7 +599,7 @@ function setPicked(lat, lng) {
   pickedLatLngEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
-  const currentType = (iftarTypeEl?.value || "mixed");
+  const currentType = iftarTypeEl?.value || "mixed";
   pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(currentType) });
   markerLayer.addLayer(pickPreviewMarker);
 }
@@ -560,13 +622,12 @@ function closeModal() {
   }
 }
 
-addSpotBtn.addEventListener("click", () => openModal());
+addSpotBtn.addEventListener("click", openModal);
 closeModalBtn.addEventListener("click", closeModal);
 
 pickLocationBtn.addEventListener("click", () => {
   pickMode = true;
 
-  // ✅ map fully clear
   modal.classList.add("picking");
   modal.classList.remove("pickMode");
 
@@ -587,7 +648,6 @@ map.on("click", (e) => {
   if (pickMode) {
     pickMode = false;
 
-    // ✅ bring modal back
     modal.classList.remove("picking");
     modal.classList.remove("hidden");
     hidePickToast();
@@ -604,7 +664,9 @@ iftarTypeEl?.addEventListener("change", () => {
   if (!pickedLatLng) return;
   const { lat, lng } = pickedLatLng;
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
-  pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(v(iftarTypeEl) || "mixed") });
+  pickPreviewMarker = L.marker([lat, lng], {
+    icon: makeFoodPinIcon(v(iftarTypeEl) || "mixed"),
+  });
   markerLayer.addLayer(pickPreviewMarker);
 });
 
@@ -623,7 +685,6 @@ async function submitSpot() {
   }, 12000);
 
   try {
-    // ✅ validate first (empty form => message + shake)
     const name = (spotNameEl?.value || "").trim();
     const area = (spotAreaEl?.value || "").trim();
     const iftarType = (iftarTypeEl?.value || "mixed").trim();
@@ -632,9 +693,9 @@ async function submitSpot() {
     if (!area) return flashBtn("⚠️ এলাকা দিন");
     if (!pickedLatLng) return flashBtn("⚠️ লোকেশন দিন");
 
-    // ✅ auth after validation
     const u = await ensureAuthReady();
-    me = u; authReady = true;
+    me = u;
+    authReady = true;
 
     if (!isInRajshahi(pickedLatLng.lat, pickedLatLng.lng)) {
       return flashBtn("⚠️ রাজশাহীর ভিতরে দিন", 1000);
@@ -657,7 +718,7 @@ async function submitSpot() {
       "Firestore timeout"
     );
 
-    spots.unshift({
+    const newSpot = {
       id: docRef.id,
       name,
       area,
@@ -669,7 +730,10 @@ async function submitSpot() {
       truthCount: 0,
       fakeCount: 0,
       myVote: null,
-    });
+    };
+
+    spots.unshift(newSpot);
+    spotsById.set(newSpot.id, newSpot);
 
     renderMarkers();
     renderList();
@@ -677,6 +741,8 @@ async function submitSpot() {
     spotNameEl.value = "";
     spotAreaEl.value = "";
     iftarTypeEl.value = "";
+
+    sessionCache.spots = null;
 
     closeModal();
   } catch (e) {
@@ -694,8 +760,8 @@ async function submitSpot() {
 }
 
 /* Boot */
-async function refreshAll() {
-  await loadSpotsAndVotes();
+async function refreshAll(force = false) {
+  await loadSpotsAndVotes(force);
   renderMarkers();
   renderList();
 }
@@ -716,7 +782,7 @@ function waitForTilesLoaded(timeoutMs = 9000) {
 
 (async function boot() {
   try {
-    await refreshAll();
+    await refreshAll(true);
     await waitForTilesLoaded();
     setTimeout(hideLoading, 250);
   } catch (e) {
