@@ -392,7 +392,7 @@ function updateNearMeState() {
 /* Button state */
 function syncSubmitBtnState() {
   if (!submitSpotBtn) return;
-  submitSpotBtn.textContent = "স্পট যোগ করুন";
+  submitSpotBtn.textContent = ORIGINAL_SUBMIT_LABEL;
   submitSpotBtn.disabled = false;
 }
 
@@ -416,14 +416,146 @@ function hidePickToast() {
   pickToastEl = null;
 }
 
+const ORIGINAL_SUBMIT_LABEL = "স্পট যোগ করুন";
+const VALIDATION_FEEDBACK_MS = 2500;
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 let submitting = false;
+let validationTimer = null;
+let validationMessageLocked = false;
+
+function resolveSubmitButton() {
+  if (submitSpotBtn) return submitSpotBtn;
+  const modalButtons = modal?.querySelectorAll("button") || [];
+  for (const btn of modalButtons) {
+    if ((btn.textContent || "").trim() === ORIGINAL_SUBMIT_LABEL) return btn;
+  }
+  return null;
+}
+
+function triggerButtonShake(btn) {
+  if (!btn || reduceMotion.matches) return;
+  btn.classList.remove("shake");
+  void btn.offsetWidth;
+  btn.classList.add("shake");
+}
+
+function clearValidationFeedbackTimer() {
+  if (!validationTimer) return;
+  clearTimeout(validationTimer);
+  validationTimer = null;
+}
+
+function restoreValidationButtonLabel() {
+  const btn = resolveSubmitButton();
+  if (!btn) return;
+  btn.textContent = ORIGINAL_SUBMIT_LABEL;
+  btn.classList.remove("shake");
+  validationMessageLocked = false;
+  clearValidationFeedbackTimer();
+}
+
+function showValidationFeedback(message) {
+  const btn = resolveSubmitButton();
+  if (!btn) return;
+
+  triggerButtonShake(btn);
+
+  if (validationMessageLocked) return;
+
+  validationMessageLocked = true;
+  btn.textContent = message;
+
+  clearValidationFeedbackTimer();
+  validationTimer = setTimeout(() => {
+    restoreValidationButtonLabel();
+  }, VALIDATION_FEEDBACK_MS);
+}
+
+function clearInvalidStyles() {
+  [spotNameEl, spotAreaEl, iftarTypeEl, pickLocationBtn].forEach((field) => {
+    field?.classList.remove("field-invalid");
+  });
+}
+
+function markInvalidField(field) {
+  if (!field) return;
+  field.classList.add("field-invalid");
+}
+
+function focusFieldWithoutJump(field) {
+  if (!field?.focus) return;
+  const x = window.scrollX;
+  const y = window.scrollY;
+  field.focus({ preventScroll: true });
+  window.scrollTo(x, y);
+}
+
+function getValidationIssue() {
+  const name = (spotNameEl?.value || "").trim();
+  const area = (spotAreaEl?.value || "").trim();
+  const iftarType = (iftarTypeEl?.value || "").trim();
+
+  if (!name) return { message: "নাম লিখুন", field: spotNameEl };
+  if (!area) return { message: "এলাকা লিখুন", field: spotAreaEl };
+  if (!iftarType) return { message: "ইফতারের ধরন দিন", field: iftarTypeEl };
+  if (!pickedLatLng) return { message: "ম্যাপে লোকেশন দিন", field: pickLocationBtn };
+
+  return null;
+}
+
+function handleInvalidSubmission() {
+  const issue = getValidationIssue() || { message: "সব ঘর পূরণ করুন", field: spotNameEl };
+  clearInvalidStyles();
+  markInvalidField(issue.field);
+  focusFieldWithoutJump(issue.field);
+  showValidationFeedback(issue.message);
+  submitting = false;
+  return false;
+}
+
+function interceptSubmitEvent(event) {
+  const btn = resolveSubmitButton();
+  const targetBtn = event?.target?.closest?.("button");
+  const fromSubmitButton = btn && (event.target === btn || targetBtn === btn);
+  const isFormSubmit = event?.type === "submit";
+
+  if (!fromSubmitButton && !isFormSubmit) return;
+
+  if (getValidationIssue()) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    handleInvalidSubmission();
+    return;
+  }
+
+  if (validationMessageLocked) restoreValidationButtonLabel();
+}
+
+[spotNameEl, spotAreaEl].forEach((el) => {
+  el?.addEventListener("input", () => el.classList.remove("field-invalid"), { passive: true });
+});
+
+iftarTypeEl?.addEventListener("change", () => iftarTypeEl.classList.remove("field-invalid"), {
+  passive: true,
+});
+
+pickLocationBtn?.addEventListener(
+  "click",
+  () => {
+    pickLocationBtn.classList.remove("field-invalid");
+  },
+  { passive: true }
+);
+
+modal?.addEventListener("click", interceptSubmitEvent, true);
+modal?.addEventListener("submit", interceptSubmitEvent, true);
+
 function flashBtn(msg, ms = 1200) {
   if (!submitSpotBtn) return;
 
   submitSpotBtn.disabled = false;
   submitSpotBtn.textContent = msg;
-  submitSpotBtn.classList.remove("shake");
-  requestAnimationFrame(() => submitSpotBtn.classList.add("shake"));
+  triggerButtonShake(submitSpotBtn);
 
   submitting = false;
 
@@ -854,6 +986,7 @@ let pickPreviewMarker = null;
 
 function setPicked(lat, lng) {
   pickedLatLng = { lat, lng };
+  pickLocationBtn?.classList.remove("field-invalid");
   pickedLatLngEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
@@ -937,8 +1070,6 @@ iftarTypeEl?.addEventListener(
 );
 
 /* Submit */
-submitSpotBtn.addEventListener("click", submitSpot);
-
 async function submitSpot() {
   if (submitting) return;
   submitting = true;
@@ -957,6 +1088,7 @@ async function submitSpot() {
 
     if (!name) return flashBtn("⚠️ স্পটের নাম দিন");
     if (!area) return flashBtn("⚠️ এলাকা দিন");
+    if (!iftarType) return flashBtn("⚠️ ইফতারের ধরন দিন");
     if (!pickedLatLng) return flashBtn("⚠️ লোকেশন দিন");
 
     const remainingCooldownMs = getRemainingCooldownMs();
@@ -1108,6 +1240,10 @@ async function toggleNearestSort() {
   await activateNearestSort();
 }
 
+
+
+const resolvedSubmitButton = resolveSubmitButton();
+resolvedSubmitButton?.addEventListener("click", submitSpot);
 
 /* Boot */
 async function refreshAll() {
