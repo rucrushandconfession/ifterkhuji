@@ -70,13 +70,6 @@ function v(el) {
   return (el?.value || "").trim();
 }
 
-function flashBtn(msg, ms = 1100) {
-  if (!submitSpotBtn) return;
-  submitSpotBtn.disabled = false;
-  submitSpotBtn.textContent = msg;
-  setTimeout(syncSubmitBtnState, ms);
-}
-
 signInAnonymously(auth).catch((e) => console.error("Anonymous auth error:", e));
 
 /* Map */
@@ -201,15 +194,16 @@ const modal = document.getElementById("addSpotModal");
 const closeModalBtn = document.getElementById("closeModal");
 const spotNameEl = document.getElementById("spotName");
 const spotAreaEl = document.getElementById("spotArea");
-const iftarTypeEl = document.getElementById("iftarType"); // may or may not exist
+const iftarTypeEl = document.getElementById("iftarType");
 const pickLocationBtn = document.getElementById("pickLocationBtn");
 const pickedLatLngEl = document.getElementById("pickedLatLng");
 const submitSpotBtn = document.getElementById("submitSpotBtn");
 
-/* ✅ Button state: always clickable so empty-form message shows */
+/* Button state */
 function syncSubmitBtnState() {
   if (!submitSpotBtn) return;
   submitSpotBtn.textContent = "স্পট যোগ করুন";
+  // ✅ always clickable so empty-form message can show
   submitSpotBtn.disabled = false;
 }
 
@@ -218,6 +212,41 @@ onAuthStateChanged(auth, (u) => {
   authReady = !!u?.uid;
   syncSubmitBtnState();
 });
+
+/* ✅ Pick toast + shake message helpers */
+let pickToastEl = null;
+function showPickToast() {
+  if (pickToastEl) return;
+  pickToastEl = document.createElement("div");
+  pickToastEl.className = "pickToast";
+  pickToastEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
+  document.body.appendChild(pickToastEl);
+}
+function hidePickToast() {
+  pickToastEl?.remove();
+  pickToastEl = null;
+}
+
+let submitting = false;
+function flashBtn(msg, ms = 1200) {
+  if (!submitSpotBtn) return;
+
+  submitSpotBtn.disabled = false;
+  submitSpotBtn.textContent = msg;
+
+  // ✅ shake effect (CSS .shake)
+  submitSpotBtn.classList.remove("shake");
+  void submitSpotBtn.offsetWidth; // reflow
+  submitSpotBtn.classList.add("shake");
+
+  // ✅ important: if we returned early, allow clicking again
+  submitting = false;
+
+  setTimeout(() => {
+    submitSpotBtn.classList.remove("shake");
+    syncSubmitBtnState();
+  }, ms);
+}
 
 /* Data */
 let spots = [];
@@ -503,27 +532,13 @@ let pickMode = false;
 let pickedLatLng = null;
 let pickPreviewMarker = null;
 
-/* ✅ pick toast (new) */
-let pickToastEl = null;
-function showPickToast() {
-  if (pickToastEl) return;
-  pickToastEl = document.createElement("div");
-  pickToastEl.className = "pickToast";
-  pickToastEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
-  document.body.appendChild(pickToastEl);
-}
-function hidePickToast() {
-  pickToastEl?.remove();
-  pickToastEl = null;
-}
-
 function setPicked(lat, lng) {
   pickedLatLng = { lat, lng };
   pickedLatLngEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
-  const t = v(iftarTypeEl) || "mixed";
-  pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(t) });
+  const currentType = (iftarTypeEl?.value || "mixed");
+  pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(currentType) });
   markerLayer.addLayer(pickPreviewMarker);
 }
 
@@ -534,11 +549,11 @@ function openModal() {
 function closeModal() {
   modal.classList.add("hidden");
   modal.classList.remove("pickMode");
-  modal.classList.remove("picking"); // ✅ ensure pick overlay removed
+  modal.classList.remove("picking");
+  hidePickToast();
   pickMode = false;
   pickedLatLng = null;
   pickedLatLngEl.textContent = "📍 ম্যাপ থেকে লোকেশন দিন";
-  hidePickToast(); // ✅
   if (pickPreviewMarker) {
     markerLayer.removeLayer(pickPreviewMarker);
     pickPreviewMarker = null;
@@ -548,12 +563,12 @@ function closeModal() {
 addSpotBtn.addEventListener("click", () => openModal());
 closeModalBtn.addEventListener("click", closeModal);
 
-/* ✅ “ম্যাপ থেকে নিন” => map clear (modalCard hide) */
 pickLocationBtn.addEventListener("click", () => {
   pickMode = true;
 
-  // ✅ this class is handled in CSS (new)
+  // ✅ map fully clear
   modal.classList.add("picking");
+  modal.classList.remove("pickMode");
 
   pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
   showPickToast();
@@ -569,11 +584,14 @@ map.on("click", (e) => {
     return;
   }
 
-  // ✅ pick mode click: bring modal back + set picked
   if (pickMode) {
     pickMode = false;
-    modal.classList.remove("picking"); // ✅ show modalCard again
+
+    // ✅ bring modal back
+    modal.classList.remove("picking");
+    modal.classList.remove("hidden");
     hidePickToast();
+
     setPicked(lat, lng);
     return;
   }
@@ -586,15 +604,11 @@ iftarTypeEl?.addEventListener("change", () => {
   if (!pickedLatLng) return;
   const { lat, lng } = pickedLatLng;
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
-  pickPreviewMarker = L.marker([lat, lng], {
-    icon: makeFoodPinIcon(v(iftarTypeEl) || "mixed"),
-  });
+  pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(v(iftarTypeEl) || "mixed") });
   markerLayer.addLayer(pickPreviewMarker);
 });
 
-/* ✅ Submit stuck fix */
-let submitting = false;
-
+/* ✅ Submit */
 submitSpotBtn.addEventListener("click", submitSpot);
 
 async function submitSpot() {
@@ -609,23 +623,21 @@ async function submitSpot() {
   }, 12000);
 
   try {
-    // ✅ auth ready না হলেও ইউজার মেসেজ পাবে
-    if (!auth.currentUser?.uid) {
-      flashBtn("⏳ একটু অপেক্ষা করুন...");
-      const u = await ensureAuthReady();
-      me = u;
-      authReady = true;
-    }
+    // ✅ validate first (empty form => message + shake)
+    const name = (spotNameEl?.value || "").trim();
+    const area = (spotAreaEl?.value || "").trim();
+    const iftarType = (iftarTypeEl?.value || "mixed").trim();
 
-    const name = v(spotNameEl);
-    const area = v(spotAreaEl);
-    const iftarType = v(iftarTypeEl) || "mixed";
+    if (!name) return flashBtn("⚠️ স্পটের নাম দিন");
+    if (!area) return flashBtn("⚠️ এলাকা দিন");
+    if (!pickedLatLng) return flashBtn("⚠️ লোকেশন দিন");
 
-    if (!name) return flashBtn("⚠️ স্পটের নাম দিন", 1100);
-    if (!area) return flashBtn("⚠️ এলাকা দিন", 1100);
-    if (!pickedLatLng) return flashBtn("⚠️ লোকেশন দিন", 1100);
+    // ✅ auth after validation
+    const u = await ensureAuthReady();
+    me = u; authReady = true;
+
     if (!isInRajshahi(pickedLatLng.lat, pickedLatLng.lng)) {
-      return flashBtn("⚠️ রাজশাহীর ভিতরে দিন", 1200);
+      return flashBtn("⚠️ রাজশাহীর ভিতরে দিন", 1000);
     }
 
     submitSpotBtn.disabled = true;
@@ -664,19 +676,16 @@ async function submitSpot() {
 
     spotNameEl.value = "";
     spotAreaEl.value = "";
-    if (iftarTypeEl) iftarTypeEl.value = "";
+    iftarTypeEl.value = "";
 
     closeModal();
   } catch (e) {
     console.error("Submit failed:", e);
-    submitSpotBtn.disabled = false;
 
     const msg = String(e?.message || "").toLowerCase();
-    if (msg.includes("permission")) submitSpotBtn.textContent = "⚠️ Permission denied";
-    else if (msg.includes("timeout")) submitSpotBtn.textContent = "⚠️ নেট স্লো (আবার চেষ্টা করুন)";
-    else submitSpotBtn.textContent = "⚠️ সাবমিট হয়নি (আবার চেষ্টা করুন)";
-
-    setTimeout(syncSubmitBtnState, 1400);
+    if (msg.includes("permission")) flashBtn("⚠️ Permission denied", 1400);
+    else if (msg.includes("timeout")) flashBtn("⚠️ নেট স্লো (আবার চেষ্টা করুন)", 1400);
+    else flashBtn("⚠️ সাবমিট হয়নি (আবার চেষ্টা করুন)", 1400);
   } finally {
     clearTimeout(failSafe);
     submitting = false;
