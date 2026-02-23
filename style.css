@@ -190,6 +190,8 @@ body{
 
   display:flex;
   flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
   will-change: height;
 }
 
@@ -206,22 +208,172 @@ body{
   align-items:center;
   justify-content:space-between;
   gap: 10px;
-  padding: 0 14px 10px;
+  padding: 0 14px 8px;
+  flex-shrink:0;
 }
 
 .sheetTitle{
   font-weight: 900;
-  font-size: 18px;
+  font-size: 17px;
+  letter-spacing: .1px;
   display:flex;
   align-items:center;
-  gap: 10px;
+  gap: 8px;
+}
+
+
+.dateChips{
+  display:flex;
+  align-items:center;
+  gap: 6px;
+}
+
+.dateChip{
+  border: 1px solid rgba(255,255,255,0.24);
+  background: rgba(255,255,255,0.12);
+  color:#fff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-family: "Hind Siliguri", system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  font-weight: 800;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: transform .18s ease, opacity .18s ease;
+}
+
+.dateChip.active,
+.dateChip[aria-pressed="true"]{
+  background: rgba(255,255,255,0.24);
+  border-color: rgba(255,255,255,0.34);
+}
+
+.dateChip:active{
+  transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce){
+  .dateChip{ transition: none; }
+}
+
+
+.sheetControls{
+  padding: 0 12px 9px;
+  display:flex;
+  flex-direction:column;
+  gap: 7px;
+  flex-shrink: 0;
+}
+
+.dateControlRow{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+  min-height: 34px;
+}
+
+.dateChips{ display:flex; gap:6px; flex-wrap:wrap; }
+
+.dateChip,
+.filterPill,
+.viewTab,
+.panelToggle,
+.loadMoreBtn{
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.12);
+  color:#fff;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-weight: 800;
+  font-size: 11.5px;
+  line-height: 1.15;
+  letter-spacing: .05px;
+  box-shadow: 0 1px 2px rgba(2,6,23,0.08);
+  cursor: pointer;
+  transition: transform .18s ease, opacity .18s ease;
+}
+
+.dateChip.active,
+.dateChip[aria-pressed="true"],
+.filterPill.active,
+.filterPill[aria-pressed="true"],
+.viewTab.active,
+.viewTab[aria-selected="true"]{
+  background: rgba(255,255,255,0.22);
+  border-color: rgba(255,255,255,0.34);
+  box-shadow: 0 2px 6px rgba(2,6,23,0.10);
+}
+
+.listDatePicker{
+  margin-left: auto;
+  min-width: 124px;
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.12);
+  color:#fff;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font-weight: 800;
+  font-size: 11.5px;
+  box-shadow: 0 1px 2px rgba(2,6,23,0.08);
+}
+
+.listDatePicker::-webkit-calendar-picker-indicator{ filter: invert(1); opacity:.9; }
+
+.dateStrip{ display:flex; gap:6px; overflow:auto; padding-bottom:2px; align-items:center; }
+.dateStripBtn{ white-space:nowrap; }
+.dateStripBtn small{ opacity:.85; margin-left:4px; font-size:10px; }
+
+.availabilityIndicator{
+  display:flex;
+  align-items:center;
+  min-height: 20px;
+  font-size: 11.5px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.92);
+  opacity: .96;
+}
+
+.viewTabs{ display:flex; gap:6px; }
+.viewTab{ flex:1; text-align:center; }
+
+.viewPanel.hidden{ display:none; }
+.panelToggle{
+  width:100%;
+  border-radius: 12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 8px 10px;
+}
+.panelToggle .panelCaret{ transition: transform .18s ease; }
+.viewPanel.collapsed .panelToggle .panelCaret{ transform: rotate(-90deg); }
+
+.allFilters{ display:flex; flex-direction:column; gap:6px; margin-top:7px; }
+.viewPanel.collapsed .allFilters{ display:none; }
+
+.filterPills{ display:flex; flex-wrap:wrap; gap:6px; }
+.filterRow{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.sortPills{ display:flex; gap:6px; }
+
+.listFooter{ padding: 0 12px 10px; display:flex; justify-content:center; flex-shrink:0; position:relative; z-index:1; }
+.loadMoreBtn.hidden{ display:none; }
+
+@media (prefers-reduced-motion: reduce){
+  .dateChip,.filterPill,.viewTab,.panelToggle,.panelToggle .panelCaret,.loadMoreBtn{ transition:none; }
+}
+
+.sheetHeader .sheetMeta{
+  align-self: center;
 }
 
 .sheetMeta{
   background: rgba(255,255,255,0.18);
   border: 1px solid rgba(255,255,255,0.22);
   border-radius: 999px;
-  padding: 8px 12px;
+  padding: 7px 11px;
+  font-size: 12px;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(2,6,23,0.08);
   font-weight: 900;
 }
 
@@ -232,10 +384,15 @@ body{
   border-radius: var(--radius-lg);
 
   padding: 10px;
-  overflow: auto;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: calc(86vh - 250px);
+  overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  position: relative;
+  z-index: 1;
 }
 
 .empty{
@@ -623,7 +780,14 @@ body{
 
 @media (max-width: 420px){
   .brand{ font-size: 16px; padding: 9px 12px; }
+  .dateChips{ gap: 4px; }
+  .dateChip{ padding: 5px 9px; font-size: 12px; }
   .countdownPill .time{ font-size: 15px; }
+  .sheetControls{ gap: 7px; }
+  .listDatePicker{ min-width: 112px; }
+  .list{ min-height: 110px; max-height: calc(86vh - 270px); }
+  .filterRow{ flex-direction: column; align-items: stretch; }
+  .sortPills{ justify-content: flex-end; }
   .voteBtn{ padding: 11px 12px; font-size: 13px; }
   .spotCard{ width: 290px; }
   .addSpotBtn{ right: 12px; bottom: 114px; font-size: 13px; }

@@ -105,6 +105,20 @@ function toMillis(value) {
   return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
+function getLocalDateStringWithOffset(offset = 0, baseDate = new Date()) {
+  const d = new Date(baseDate);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + offset);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getLocalTodayString(date = new Date()) {
+  return getLocalDateStringWithOffset(0, date);
+}
+
 function normalizeText(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -344,10 +358,310 @@ const closeModalBtn = document.getElementById("closeModal");
 const spotNameEl = document.getElementById("spotName");
 const spotAreaEl = document.getElementById("spotArea");
 const iftarTypeEl = document.getElementById("iftarType");
+const iftarDateEl = document.getElementById("iftarDate");
 const pickLocationBtn = document.getElementById("pickLocationBtn");
 const pickedLatLngEl = document.getElementById("pickedLatLng");
 const submitSpotBtn = document.getElementById("submitSpotBtn");
 const sheetMetaEl = document.querySelector(".sheetMeta");
+const dateChipsEl = document.getElementById("dateChips");
+const listDatePickerEl = document.getElementById("listDatePicker");
+const dateStripEl = document.getElementById("dateStrip");
+const availabilityIndicatorEl = document.getElementById("availabilityIndicator");
+const viewTabsEl = document.getElementById("viewTabs");
+const datePanelEl = document.getElementById("datePanel");
+const allPanelEl = document.getElementById("allPanel");
+const typeFiltersEl = document.getElementById("typeFilters");
+const verifiedOnlyToggleEl = document.getElementById("verifiedOnlyToggle");
+const sortControlsEl = document.getElementById("sortControls");
+const loadMoreBtn = document.getElementById("loadMoreBtn");
+
+const ALL_SPOTS_PAGE_SIZE = 30;
+let selectedDateString = getLocalTodayString();
+let activeView = "date";
+let allVisibleCount = ALL_SPOTS_PAGE_SIZE;
+let allTypeFilter = "all";
+let verifiedOnly = false;
+let lastFilteredTotal = 0;
+const collapsedPanels = { date: false, all: false };
+
+function isTodayString(dateString) {
+  return dateString === getLocalTodayString();
+}
+
+function isSpotVisibleForDate(spot, dateString = selectedDateString) {
+  const dateValue = spot?.iftarDate;
+  if (isTodayString(dateString)) return !dateValue || dateValue === dateString;
+  return dateValue === dateString;
+}
+
+function isVerifiedSpot(spot) {
+  return getBadge(spot.truthCount, spot.fakeCount).cls === "good";
+}
+
+function updateAvailabilityIndicator() {
+  if (!availabilityIndicatorEl) return;
+  const count = allSpots.filter((spot) => isSpotVisibleForDate(spot, selectedDateString)).length;
+  const icon = count > 0 ? "✅" : "❌";
+  availabilityIndicatorEl.textContent = `এই তারিখে আছে: ${icon} (${count} টি)`;
+}
+
+function getWeekdayLabel(dateString) {
+  const d = new Date(`${dateString}T00:00:00`);
+  return ["রবি", "সোম", "মঙ্গল", "বুধ", "বৃহ", "শুক্র", "শনি"][d.getDay()] || "";
+}
+
+function buildDateStrip() {
+  if (!dateStripEl) return;
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < 7; i++) {
+    const dateValue = getLocalDateStringWithOffset(i);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "dateChip dateStripBtn";
+    btn.setAttribute("data-date", dateValue);
+    btn.innerHTML = `${dateValue.slice(8)} <small>${getWeekdayLabel(dateValue)}</small>`;
+    frag.appendChild(btn);
+  }
+  dateStripEl.replaceChildren(frag);
+}
+
+function syncDateControls() {
+  if (listDatePickerEl) listDatePickerEl.value = selectedDateString;
+
+  if (dateChipsEl) {
+    const chips = dateChipsEl.querySelectorAll(".dateChip");
+    const today = getLocalTodayString();
+    const tomorrow = getLocalDateStringWithOffset(1);
+    const dayAfterTomorrow = getLocalDateStringWithOffset(2);
+
+    for (const chip of chips) {
+      const offset = Number(chip.getAttribute("data-day-offset"));
+      const target = offset === 0 ? today : offset === 1 ? tomorrow : dayAfterTomorrow;
+      const active = selectedDateString === target;
+      chip.classList.toggle("active", active);
+      chip.setAttribute("aria-pressed", active ? "true" : "false");
+    }
+  }
+
+  if (dateStripEl) {
+    const stripBtns = dateStripEl.querySelectorAll(".dateStripBtn");
+    for (const btn of stripBtns) {
+      const active = btn.getAttribute("data-date") === selectedDateString;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    }
+  }
+}
+
+function syncViewTabsAndPanels() {
+  const tabs = viewTabsEl?.querySelectorAll(".viewTab") || [];
+  for (const tab of tabs) {
+    const view = tab.getAttribute("data-view");
+    const active = view === activeView;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  }
+
+  datePanelEl?.classList.toggle("hidden", activeView !== "date");
+  allPanelEl?.classList.toggle("hidden", activeView !== "all");
+
+  datePanelEl?.classList.toggle("collapsed", collapsedPanels.date);
+  allPanelEl?.classList.toggle("collapsed", collapsedPanels.all);
+
+  const dateToggle = datePanelEl?.querySelector(".panelToggle");
+  const allToggle = allPanelEl?.querySelector(".panelToggle");
+  dateToggle?.setAttribute("aria-expanded", collapsedPanels.date ? "false" : "true");
+  allToggle?.setAttribute("aria-expanded", collapsedPanels.all ? "false" : "true");
+}
+
+function getAllViewFilteredSpots() {
+  let filtered = allSpots;
+
+  if (allTypeFilter !== "all") {
+    filtered = filtered.filter((spot) => (spot.iftarType || "mixed") === allTypeFilter);
+  }
+
+  if (verifiedOnly) {
+    filtered = filtered.filter((spot) => isVerifiedSpot(spot));
+  }
+
+  return filtered;
+}
+
+function applyCurrentViewFilter({ resetAllPagination = false } = {}) {
+  if (activeView === "date") {
+    spots = allSpots.filter((spot) => isSpotVisibleForDate(spot, selectedDateString));
+    sortSpotsInPlace();
+    lastFilteredTotal = spots.length;
+    loadMoreBtn?.classList.add("hidden");
+  } else {
+    const filtered = getAllViewFilteredSpots();
+
+    const sorted = [...filtered];
+    spots = sorted;
+    sortSpotsInPlace();
+
+    if (resetAllPagination) allVisibleCount = ALL_SPOTS_PAGE_SIZE;
+    const visible = Math.min(allVisibleCount, spots.length);
+    spots = spots.slice(0, visible);
+
+    lastFilteredTotal = filtered.length;
+    if (loadMoreBtn) {
+      const shouldShow = !collapsedPanels.all && activeView === "all" && visible < filtered.length;
+      loadMoreBtn.classList.toggle("hidden", !shouldShow);
+    }
+  }
+
+  spotsById = new Map(spots.map((spot) => [spot.id, spot]));
+}
+
+function setSelectedDate(nextDateString) {
+  if (!nextDateString || nextDateString === selectedDateString) return;
+  selectedDateString = nextDateString;
+  syncDateControls();
+  updateAvailabilityIndicator();
+  applyCurrentViewFilter({ resetAllPagination: activeView === "all" });
+  renderMarkers();
+  renderList();
+}
+
+function setupListingControls() {
+  buildDateStrip();
+  syncDateControls();
+  syncViewTabsAndPanels();
+
+  dateChipsEl?.addEventListener(
+    "click",
+    (e) => {
+      const chip = e.target.closest(".dateChip");
+      if (!chip) return;
+      const offset = Number(chip.getAttribute("data-day-offset"));
+      if (!Number.isFinite(offset)) return;
+      setSelectedDate(getLocalDateStringWithOffset(offset));
+    },
+    { passive: true }
+  );
+
+  dateStripEl?.addEventListener(
+    "click",
+    (e) => {
+      const btn = e.target.closest(".dateStripBtn");
+      if (!btn) return;
+      setSelectedDate(btn.getAttribute("data-date"));
+    },
+    { passive: true }
+  );
+
+  listDatePickerEl?.addEventListener(
+    "change",
+    () => {
+      setSelectedDate((listDatePickerEl.value || "").trim());
+    },
+    { passive: true }
+  );
+
+  viewTabsEl?.addEventListener(
+    "click",
+    (e) => {
+      const tab = e.target.closest(".viewTab");
+      if (!tab) return;
+      const nextView = tab.getAttribute("data-view");
+      if (!nextView || nextView === activeView) return;
+      activeView = nextView;
+      syncViewTabsAndPanels();
+      applyCurrentViewFilter({ resetAllPagination: true });
+      renderMarkers();
+      renderList();
+    },
+    { passive: true }
+  );
+
+  [datePanelEl, allPanelEl].forEach((panelEl) => {
+    panelEl
+      ?.querySelector(".panelToggle")
+      ?.addEventListener(
+        "click",
+        () => {
+          const panel = panelEl.getAttribute("data-view-panel");
+          collapsedPanels[panel] = !collapsedPanels[panel];
+          syncViewTabsAndPanels();
+          applyCurrentViewFilter();
+          renderMarkers();
+          renderList();
+        },
+        { passive: true }
+      );
+  });
+
+  typeFiltersEl?.addEventListener(
+    "click",
+    (e) => {
+      const btn = e.target.closest(".filterPill");
+      if (!btn) return;
+      const t = btn.getAttribute("data-type");
+      if (!t || t === allTypeFilter) return;
+      allTypeFilter = t;
+
+      const all = typeFiltersEl.querySelectorAll(".filterPill");
+      for (const item of all) {
+        const active = item.getAttribute("data-type") === allTypeFilter;
+        item.classList.toggle("active", active);
+        item.setAttribute("aria-pressed", active ? "true" : "false");
+      }
+
+      applyCurrentViewFilter({ resetAllPagination: true });
+      renderMarkers();
+      renderList();
+    },
+    { passive: true }
+  );
+
+  verifiedOnlyToggleEl?.addEventListener(
+    "click",
+    () => {
+      verifiedOnly = !verifiedOnly;
+      verifiedOnlyToggleEl.classList.toggle("active", verifiedOnly);
+      verifiedOnlyToggleEl.setAttribute("aria-pressed", verifiedOnly ? "true" : "false");
+      applyCurrentViewFilter({ resetAllPagination: true });
+      renderMarkers();
+      renderList();
+    },
+    { passive: true }
+  );
+
+  sortControlsEl?.addEventListener(
+    "click",
+    async (e) => {
+      const btn = e.target.closest(".filterPill");
+      if (!btn) return;
+      const requestedSort = btn.getAttribute("data-sort");
+      if (!requestedSort || requestedSort === sortMode) return;
+
+      if (requestedSort === "nearest") {
+        await activateNearestSort();
+      } else {
+        sortMode = "newest";
+      }
+
+      updateNearMeState();
+      applyCurrentViewFilter();
+      renderMarkers();
+      renderList();
+    },
+    { passive: true }
+  );
+
+  loadMoreBtn?.addEventListener(
+    "click",
+    () => {
+      allVisibleCount += ALL_SPOTS_PAGE_SIZE;
+      applyCurrentViewFilter();
+      renderMarkers();
+      renderList();
+    },
+    { passive: true }
+  );
+}
 
 /* Near me sort */
 let sortMode = "newest";
@@ -385,8 +699,16 @@ function setupNearMeControl() {
 }
 
 function updateNearMeState() {
-  if (!nearMeControlBtn) return;
-  nearMeControlBtn.setAttribute("aria-pressed", sortMode === "nearest" ? "true" : "false");
+  if (nearMeControlBtn) {
+    nearMeControlBtn.setAttribute("aria-pressed", sortMode === "nearest" ? "true" : "false");
+  }
+
+  const sortBtns = sortControlsEl?.querySelectorAll(".filterPill") || [];
+  for (const item of sortBtns) {
+    const active = item.getAttribute("data-sort") === sortMode;
+    item.classList.toggle("active", active);
+    item.setAttribute("aria-pressed", active ? "true" : "false");
+  }
 }
 
 /* Button state */
@@ -472,7 +794,7 @@ function showValidationFeedback(message) {
 }
 
 function clearInvalidStyles() {
-  [spotNameEl, spotAreaEl, iftarTypeEl, pickLocationBtn].forEach((field) => {
+  [spotNameEl, spotAreaEl, iftarTypeEl, iftarDateEl, pickLocationBtn].forEach((field) => {
     field?.classList.remove("field-invalid");
   });
 }
@@ -494,10 +816,12 @@ function getValidationIssue() {
   const name = (spotNameEl?.value || "").trim();
   const area = (spotAreaEl?.value || "").trim();
   const iftarType = (iftarTypeEl?.value || "").trim();
+  const iftarDate = (iftarDateEl?.value || "").trim();
 
   if (!name) return { message: "নাম লিখুন", field: spotNameEl };
   if (!area) return { message: "এলাকা লিখুন", field: spotAreaEl };
   if (!iftarType) return { message: "ইফতারের ধরন দিন", field: iftarTypeEl };
+  if (!iftarDate) return { message: "তারিখ দিন", field: iftarDateEl };
   if (!pickedLatLng) return { message: "ম্যাপে লোকেশন দিন", field: pickLocationBtn };
 
   return null;
@@ -539,6 +863,10 @@ iftarTypeEl?.addEventListener("change", () => iftarTypeEl.classList.remove("fiel
   passive: true,
 });
 
+iftarDateEl?.addEventListener("input", () => iftarDateEl.classList.remove("field-invalid"), {
+  passive: true,
+});
+
 pickLocationBtn?.addEventListener(
   "click",
   () => {
@@ -566,6 +894,7 @@ function flashBtn(msg, ms = 1200) {
 }
 
 /* Data */
+let allSpots = [];
 let spots = [];
 let spotsById = new Map();
 const markerLayer = L.layerGroup().addTo(map);
@@ -745,9 +1074,8 @@ async function loadSpotsAndVotes() {
     if (!s.iftarType) s.iftarType = "mixed";
   }
 
-  spots = nextSpots;
-  sortSpotsInPlace();
-  spotsById = new Map(spots.map((spot) => [spot.id, spot]));
+  allSpots = nextSpots;
+  applyCurrentViewFilter({ resetAllPagination: true });
 }
 
 /* Pins */
@@ -896,7 +1224,13 @@ function createListCard(s) {
 }
 
 function renderList() {
-  countEl.textContent = String(spots.length);
+  countEl.textContent = String(lastFilteredTotal);
+
+  if ((activeView === "date" && collapsedPanels.date) || (activeView === "all" && collapsedPanels.all)) {
+    listEl.innerHTML = `<div class="empty">লিস্ট বন্ধ আছে</div>`;
+    loadMoreBtn?.classList.add("hidden");
+    return;
+  }
 
   if (!spots.length) {
     listEl.innerHTML = `<div class="empty">কোনো স্পট নেই</div>`;
@@ -997,6 +1331,7 @@ function setPicked(lat, lng) {
 
 function openModal() {
   modal.classList.remove("hidden");
+  if (iftarDateEl) iftarDateEl.value = getLocalTodayString();
   syncSubmitBtnState();
 }
 function closeModal() {
@@ -1007,6 +1342,7 @@ function closeModal() {
   pickMode = false;
   pickedLatLng = null;
   pickedLatLngEl.textContent = "📍 ম্যাপ থেকে লোকেশন দিন";
+  if (iftarDateEl) iftarDateEl.value = getLocalTodayString();
   if (pickPreviewMarker) {
     markerLayer.removeLayer(pickPreviewMarker);
     pickPreviewMarker = null;
@@ -1085,10 +1421,12 @@ async function submitSpot() {
     const name = (spotNameEl?.value || "").trim();
     const area = (spotAreaEl?.value || "").trim();
     const iftarType = (iftarTypeEl?.value || "mixed").trim();
+    const iftarDate = (iftarDateEl?.value || "").trim();
 
     if (!name) return flashBtn("⚠️ স্পটের নাম দিন");
     if (!area) return flashBtn("⚠️ এলাকা দিন");
     if (!iftarType) return flashBtn("⚠️ ইফতারের ধরন দিন");
+    if (!iftarDate) return flashBtn("তারিখ দিন");
     if (!pickedLatLng) return flashBtn("⚠️ লোকেশন দিন");
 
     const remainingCooldownMs = getRemainingCooldownMs();
@@ -1096,7 +1434,7 @@ async function submitSpot() {
       return flashBtn(`⚠️ ${Math.ceil(remainingCooldownMs / 1000)} সেকেন্ড পরে দিন`, 1500);
     }
 
-    const duplicateExists = spots.some((s) => {
+    const duplicateExists = allSpots.some((s) => {
       if (typeof s.lat !== "number" || typeof s.lng !== "number") return false;
       return (
         normalizeText(s.name) === normalizeText(name) &&
@@ -1126,6 +1464,7 @@ async function submitSpot() {
         name,
         area,
         iftarType,
+        iftarDate,
         lat: pickedLatLng.lat,
         lng: pickedLatLng.lng,
         createdBy: me.uid,
@@ -1142,6 +1481,7 @@ async function submitSpot() {
       name,
       area,
       iftarType,
+      iftarDate,
       lat: pickedLatLng.lat,
       lng: pickedLatLng.lng,
       createdBy: me.uid,
@@ -1151,9 +1491,8 @@ async function submitSpot() {
       myVote: null,
     };
 
-    spots.unshift(newSpot);
-    sortSpotsInPlace();
-    spotsById = new Map(spots.map((spot) => [spot.id, spot]));
+    allSpots.unshift(newSpot);
+    applyCurrentViewFilter({ resetAllPagination: true });
 
     if (Array.isArray(firestoreCache.spots)) {
       firestoreCache.spots = [
@@ -1162,6 +1501,7 @@ async function submitSpot() {
           name: newSpot.name,
           area: newSpot.area,
           iftarType: newSpot.iftarType,
+          iftarDate: newSpot.iftarDate,
           lat: newSpot.lat,
           lng: newSpot.lng,
           createdBy: newSpot.createdBy,
@@ -1180,6 +1520,7 @@ async function submitSpot() {
     spotNameEl.value = "";
     spotAreaEl.value = "";
     iftarTypeEl.value = "mixed";
+    if (iftarDateEl) iftarDateEl.value = getLocalTodayString();
 
     closeModal();
   } catch (e) {
@@ -1221,8 +1562,8 @@ async function activateNearestSort() {
     sortMode = "newest";
   } finally {
     updateNearMeState();
-    sortSpotsInPlace();
-    spotsById = new Map(spots.map((spot) => [spot.id, spot]));
+    applyCurrentViewFilter();
+    renderMarkers();
     renderList();
   }
 }
@@ -1231,8 +1572,8 @@ async function toggleNearestSort() {
   if (sortMode === "nearest") {
     sortMode = "newest";
     updateNearMeState();
-    sortSpotsInPlace();
-    spotsById = new Map(spots.map((spot) => [spot.id, spot]));
+    applyCurrentViewFilter();
+    renderMarkers();
     renderList();
     return;
   }
@@ -1242,12 +1583,19 @@ async function toggleNearestSort() {
 
 
 
+if (iftarDateEl && !iftarDateEl.value) {
+  iftarDateEl.value = getLocalTodayString();
+}
+
 const resolvedSubmitButton = resolveSubmitButton();
 resolvedSubmitButton?.addEventListener("click", submitSpot);
 
 /* Boot */
 async function refreshAll() {
   await loadSpotsAndVotes();
+  syncDateControls();
+  updateAvailabilityIndicator();
+  syncViewTabsAndPanels();
   renderMarkers();
   renderList();
 }
@@ -1269,6 +1617,8 @@ function waitForTilesLoaded(timeoutMs = 9000) {
 (async function boot() {
   try {
     setupNearMeControl();
+    setupListingControls();
+    updateNearMeState();
     await refreshAll();
 
     const sessionCached = readSessionCache();
