@@ -3,123 +3,91 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>রাজশাহী ইফতার</title>
+  <title>Free Iftar</title>
 
-  <!-- Bangla Font: Hind Siliguri -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 
-  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-
-  <!-- App CSS -->
   <link rel="stylesheet" href="./style.css" />
 </head>
 
 <body>
-
-  <!-- ✅ LOADING OVERLAY -->
-  <div id="loadingOverlay" class="loadingOverlay" aria-label="লোডিং">
+  <!-- Loading -->
+  <div id="loadingOverlay" class="loadingOverlay">
     <div class="loadingCard">
       <div class="loadingIcon">🍽️</div>
-      <div class="loadingTitle">রাজশাহীর ফ্রি ইফতার ম্যাপ লোড হচ্ছে…</div>
-      <div class="loadingSub">দয়া করে একটু অপেক্ষা করুন</div>
+      <div class="loadingTitle">লোড হচ্ছে…</div>
+      <div class="loadingSub">ইফতার স্পট লোড হচ্ছে</div>
       <div class="loadingBar"><span></span></div>
     </div>
   </div>
 
-  <!-- =========================
-       TOP BAR
-  ========================== -->
+  <!-- Topbar -->
   <header class="topbar">
-    <div class="brand">🌙 রাজশাহী ইফতার</div>
+    <div class="brand">🌙 Free Iftar</div>
 
     <div class="countdownPill">
-      <span class="label">ইফতার বাকি</span>
-      <span id="countdown" class="time">--</span>
+      <div class="label">ইফতার বাকি</div>
+      <div id="countdown" class="time">--</div>
     </div>
   </header>
 
-  <!-- =========================
-       MAP
-  ========================== -->
+  <!-- Map -->
   <div id="map"></div>
 
-  <!-- ✅ CTA ADD BUTTON (TEXT + COLOR CHANGE) -->
-  <button
-    id="addSpotBtn"
-    class="addSpotBtn"
-    title="ইফতার স্পট যোগ করতে এখানে ক্লিক করুন"
-    aria-label="ইফতার স্পট যোগ করতে এখানে ক্লিক করুন"
-  >
-    🍽️ ইফতার স্পট যোগ করতে এখানে ক্লিক করুন
-  </button>
+  <!-- Floating add button -->
+  <button id="addSpotBtn" class="addSpotBtn">➕ স্পট যোগ</button>
 
-  <!-- =========================
-       BOTTOM SHEET
-  ========================== -->
-  <section id="sheet" class="sheet" aria-label="আজকের সক্রিয় ইফতার">
-    <div id="sheetHandle" class="sheetHandle" aria-label="drag handle"></div>
+  <!-- Bottom sheet -->
+  <section id="sheet" class="sheet">
+    <div id="sheetHandle" class="sheetHandle"></div>
 
     <div class="sheetHeader">
-      <div class="sheetTitle">🍽️ আজকের সক্রিয় ইফতার</div>
-      <div class="sheetMeta">
-        <span id="spotCount">0</span>টি
-      </div>
+      <div class="sheetTitle">🍽️ আজকের স্পট</div>
+      <div class="sheetMeta"><span id="spotCount">0</span> টি</div>
     </div>
 
     <div id="list" class="list">
-      <div class="empty">কোনো স্পট নেই</div>
+      <div class="empty">লোড হচ্ছে…</div>
     </div>
   </section>
 
-  <!-- =========================
-       ADD SPOT MODAL
-  ========================== -->
-  <div id="addSpotModal" class="modal hidden" aria-label="ইফতার স্পট যোগ করুন">
+  <!-- Add spot modal -->
+  <div id="addSpotModal" class="modal hidden">
     <div class="modalCard">
-
       <div class="modalHeader">
-        <div>
-          <div class="modalTitle">📍 ইফতার স্পট যোগ করুন</div>
-          <div class="modalSub">উম্মাকে ইফতার খুঁজে পেতে সাহায্য করুন</div>
-        </div>
-        <button id="closeModal" class="modalClose" aria-label="Close">✕</button>
+        <div class="modalTitle">📍 ইফতার স্পট যোগ করুন</div>
+        <div class="modalSub">নাম, এলাকা এবং লোকেশন দিন</div>
+        <button id="closeModal" class="modalClose">✕</button>
       </div>
 
       <div class="modalBody">
-        <label>স্পট / মসজিদের নাম *</label>
-        <input id="spotName" placeholder="উদাহরণ: কাজলা জামে মসজিদ" />
+        <label>স্পটের নাম *</label>
+        <input id="spotName" placeholder="উদাহরণ: আল-আমিন মসজিদ" />
 
         <label>এলাকা *</label>
-        <input id="spotArea" placeholder="উদাহরণ: কাজলা, রাজশাহী" />
+        <input id="spotArea" placeholder="উদাহরণ: সাহেব বাজার" />
 
-        <!-- ✅ NEW: IFTAR TYPE -->
-        <label>ইফতারের ধরণ *</label>
+        <label>ইফতারের ধরন *</label>
         <select id="iftarType" class="select">
-          <option value="" selected>ইফতারের ধরণ নির্বাচন করুন</option>
+          <option value="mixed">মিশ্র</option>
           <option value="biriyani">বিরিয়ানি</option>
           <option value="chinese">চাইনিজ</option>
-          <option value="mixed">মিশ্র</option>
         </select>
 
         <div class="pinRow">
           <div id="pickedLatLng" class="pinText">📍 ম্যাপ থেকে লোকেশন দিন</div>
-          <button id="pickLocationBtn" class="pinBtn">ম্যাপ থেকে দিন</button>
+          <button id="pickLocationBtn" class="pinBtn">ম্যাপ থেকে নিন</button>
         </div>
 
         <button id="submitSpotBtn" class="submitBtn">স্পট যোগ করুন</button>
       </div>
-
     </div>
   </div>
 
-  <!-- =========================
-       SCRIPTS
-  ========================== -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./app.js"></script>
-
 </body>
 </html>
