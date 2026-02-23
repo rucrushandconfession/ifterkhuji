@@ -474,20 +474,6 @@ body{
 }
 .submitBtn:disabled{ opacity: 0.65; cursor: not-allowed; }
 
-/* ✅ PICK MODE: BLUR OFF (no blur) */
-.modal.pickMode{
-  background: rgba(2,6,23,0.06);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  pointer-events: none; /* map clickable */
-}
-.modal.pickMode .modalCard{
-  opacity: 0.55;
-  transform: scale(0.99);
-  filter: none;
-  pointer-events: none;
-}
-
 /* =========================
    FOOD PINS (by type)
 ========================= */
@@ -620,4 +606,38 @@ body{
   .voteBtn{ padding: 11px 12px; font-size: 13px; }
   .spotCard{ width: 290px; }
   .addSpotBtn{ right: 12px; bottom: 114px; font-size: 13px; }
+}
+
+/* =========================
+   ✅ NEW: PICKING MODE (map clear)
+========================= */
+.modal.picking{
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  pointer-events: none; /* map clickable */
+}
+.modal.picking .modalCard{
+  display:none !important; /* ✅ map fully clear */
+}
+
+/* ✅ Pick helper toast */
+.pickToast{
+  position: fixed;
+  left: 50%;
+  top: 78px;
+  transform: translateX(-50%);
+  z-index: 3000;
+
+  background: rgba(15,23,42,0.88);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: 999px;
+
+  font-family: "Hind Siliguri", system-ui;
+  font-weight: 800;
+  font-size: 13px;
+
+  box-shadow: 0 14px 30px rgba(0,0,0,0.25);
+  pointer-events: none;
 }
