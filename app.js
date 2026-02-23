@@ -1,623 +1,754 @@
-:root{
-  --bg:#f6f7f6;
-  --text:#0f172a;
-  --muted:#64748b;
+// =============================
+// app.js (FULL REPLACE)
+// =============================
 
-  --green:#275130;
-  --green2:#2f6b3a;
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  doc,
+  setDoc,
+  addDoc,
+  serverTimestamp,
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import {
+  getAuth,
+  signInAnonymously,
+  onAuthStateChanged,
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-  --card:#ffffff;
-  --border: rgba(2,6,23,0.08);
+/* =============================
+   0) Firebase Config
+============================= */
+const firebaseConfig = {
+  apiKey: "AIzaSyA6SZeKVmNAsd4eAlieCTC7zQzYMenwJEA",
+  authDomain: "free-ifter.firebaseapp.com",
+  projectId: "free-ifter",
+  storageBucket: "free-ifter.firebasestorage.app",
+  messagingSenderId: "380765313810",
+  appId: "1:380765313810:web:6b7a87bf350cba858f71cb",
+  measurementId: "G-18J6SR9913",
+};
 
-  --radius-xl: 26px;
-  --radius-lg: 20px;
-  --radius-md: 16px;
+const fbApp = initializeApp(firebaseConfig);
+const db = getFirestore(fbApp);
+const auth = getAuth(fbApp);
 
-  --shadow-sm: 0 6px 16px rgba(2,6,23,0.08);
-  --shadow-md: 0 14px 30px rgba(2,6,23,0.12);
+let me = null;
+let authReady = false;
+
+/* =============================
+   Loading overlay
+============================= */
+const loadingOverlay = document.getElementById("loadingOverlay");
+const showLoading = () => loadingOverlay?.classList.remove("hidden");
+const hideLoading = () => loadingOverlay?.classList.add("hidden");
+showLoading();
+
+/* =============================
+   Helper: ensure auth ready
+============================= */
+function ensureAuthReady(timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    if (auth.currentUser?.uid) return resolve(auth.currentUser);
+
+    const t = setTimeout(() => {
+      unsub?.();
+      reject(new Error("Auth timeout"));
+    }, timeoutMs);
+
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (u?.uid) {
+        clearTimeout(t);
+        unsub?.();
+        resolve(u);
+      }
+    });
+  });
 }
 
-*{ box-sizing: border-box; }
-html,body{ height:100%; }
-
-body{
-  margin:0;
-  font-family: "Hind Siliguri", system-ui, -apple-system, Segoe UI, Roboto, Arial;
-  background: var(--bg);
-  color: var(--text);
-  -webkit-font-smoothing: antialiased;
-  overflow: hidden;
+/* =============================
+   Helper: promise timeout
+============================= */
+function withTimeout(promise, ms, msg = "Timeout") {
+  let t;
+  const timeoutPromise = new Promise((_, reject) => {
+    t = setTimeout(() => reject(new Error(msg)), ms);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(t));
 }
 
-/* =========================
-   LOADING OVERLAY
-========================= */
-.loadingOverlay{
-  position: fixed;
-  inset: 0;
-  z-index: 99999;
-  background: rgba(246,247,246,0.96);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding: 18px;
-}
-.loadingOverlay.hidden{ display:none; }
+/* Start anonymous auth */
+signInAnonymously(auth).catch((e) => console.error("Anonymous auth error:", e));
 
-.loadingCard{
-  width: min(520px, 100%);
-  background: #fff;
-  border: 1px solid rgba(2,6,23,0.08);
-  border-radius: 22px;
-  box-shadow: 0 18px 40px rgba(2,6,23,0.12);
-  padding: 18px 18px 16px;
-  text-align:center;
-}
-.loadingIcon{
-  width: 64px;
-  height: 64px;
-  border-radius: 18px;
-  background: linear-gradient(135deg, var(--green2), var(--green));
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  margin: 0 auto 10px;
-  font-size: 30px;
-  box-shadow: 0 12px 26px rgba(2,6,23,0.18);
-  color:#fff;
-}
-.loadingTitle{
-  font-weight: 900;
-  font-size: 20px;
-  color: #1f3f27;
-}
-.loadingSub{
-  margin-top: 6px;
-  font-weight: 800;
-  color: var(--muted);
-  font-size: 14px;
-}
-.loadingBar{
-  margin: 14px auto 0;
-  width: 100%;
-  height: 10px;
-  border-radius: 999px;
-  background: rgba(2,6,23,0.08);
-  overflow:hidden;
-}
-.loadingBar span{
-  display:block;
-  height: 100%;
-  width: 45%;
-  border-radius: 999px;
-  background: linear-gradient(135deg, var(--green2), var(--green));
-  animation: slidebar 1.1s ease-in-out infinite;
-}
-@keyframes slidebar{
-  0%{ transform: translateX(-60%); }
-  50%{ transform: translateX(120%); }
-  100%{ transform: translateX(260%); }
+/* =============================
+   1) Map (Rajshahi)
+============================= */
+const rajshahiCenter = [24.3745, 88.6042];
+const rajshahiBounds = L.latLngBounds([24.30, 88.50], [24.45, 88.70]);
+
+const map = L.map("map", {
+  zoomControl: false,
+  maxBounds: rajshahiBounds,
+  maxBoundsViscosity: 1.0,
+}).setView(rajshahiCenter, 13);
+
+L.control.zoom({ position: "bottomright" }).addTo(map);
+
+const tiles = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap",
+  updateWhenIdle: true,
+  keepBuffer: 2,
+}).addTo(map);
+
+map.on("drag", () => map.panInsideBounds(rajshahiBounds, { animate: false }));
+setTimeout(() => map.invalidateSize(true), 350);
+
+function isInRajshahi(lat, lng) {
+  return lat >= 24.30 && lat <= 24.45 && lng >= 88.50 && lng <= 88.70;
 }
 
-/* =========================
-   TOP BAR
-========================= */
-.topbar{
-  position: fixed;
-  left:0; right:0; top:0;
-  z-index: 1200;
+/* =============================
+   2) Countdown
+============================= */
+const countdownEl = document.getElementById("countdown");
 
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
+async function startCountdown() {
+  try {
+    const res = await fetch(
+      "https://api.aladhan.com/v1/timingsByCity?city=Rajshahi&country=Bangladesh&method=2"
+    );
+    const js = await res.json();
+    const maghrib = js?.data?.timings?.Maghrib;
+    if (!maghrib) throw new Error("Maghrib missing");
 
-  padding: 12px;
+    const [mh, mm] = maghrib.split(":").map(Number);
 
-  background: rgba(246,247,246,0.94);
-  backdrop-filter: blur(10px);
+    setInterval(() => {
+      const now = new Date();
+      const target = new Date(now);
+      target.setHours(mh, mm, 0, 0);
+      if (target.getTime() < now.getTime()) target.setDate(target.getDate() + 1);
+
+      const diff = target.getTime() - now.getTime();
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+
+      countdownEl.textContent = `${h}ঘ ${m}মি ${s}সে`;
+    }, 1000);
+  } catch (e) {
+    console.warn("Countdown error:", e);
+    countdownEl.textContent = "--";
+  }
+}
+startCountdown();
+
+/* =============================
+   3) Bottom Sheet Drag
+============================= */
+const sheet = document.getElementById("sheet");
+const handle = document.getElementById("sheetHandle");
+
+const MIN_H = Math.round(window.innerHeight * 0.16);
+const MID_H = Math.round(window.innerHeight * 0.42);
+const MAX_H = Math.round(window.innerHeight * 0.86);
+
+let currentH = MID_H;
+sheet.style.height = `${currentH}px`;
+
+function setSheetHeight(h) {
+  currentH = Math.max(MIN_H, Math.min(MAX_H, h));
+  sheet.style.height = `${currentH}px`;
 }
 
-.brand{
-  font-weight: 900;
-  font-size: 18px;
-  color: #1f3f27;
+let startY = 0;
+let startH = 0;
+let dragging = false;
 
-  background: #fff;
-  border: 1px solid var(--border);
-  border-radius: 18px;
+function onStart(e) {
+  dragging = true;
+  sheet.style.transition = "none";
+  startY = e.touches ? e.touches[0].clientY : e.clientY;
+  startH = currentH;
 
-  padding: 10px 14px;
-  box-shadow: var(--shadow-sm);
+  document.addEventListener("mousemove", onMove);
+  document.addEventListener("mouseup", onEnd);
+  document.addEventListener("touchmove", onMove, { passive: false });
+  document.addEventListener("touchend", onEnd);
 }
 
-.countdownPill{
-  display:flex;
-  flex-direction:column;
-  align-items:flex-end;
-  gap:2px;
-
-  background: var(--green);
-  color:#fff;
-
-  border-radius: 18px;
-  padding: 10px 14px;
-  box-shadow: 0 6px 16px rgba(2,6,23,0.12);
-}
-.countdownPill .label{
-  font-size: 12px;
-  font-weight: 700;
-  opacity: .9;
-}
-.countdownPill .time{
-  font-size: 16px;
-  font-weight: 900;
-  letter-spacing: .2px;
+function onMove(e) {
+  if (!dragging) return;
+  if (e.cancelable) e.preventDefault();
+  const y = e.touches ? e.touches[0].clientY : e.clientY;
+  const dy = startY - y;
+  setSheetHeight(startH + dy);
 }
 
-/* =========================
-   MAP
-========================= */
-#map{
-  position: fixed;
-  left: 0;
-  right: 0;
-  top: 64px;
-  bottom: 0;
-  z-index: 1;
+function snapToNearest() {
+  const dMin = Math.abs(currentH - MIN_H);
+  const dMid = Math.abs(currentH - MID_H);
+  const dMax = Math.abs(currentH - MAX_H);
+  let target = MID_H;
+  if (dMin <= dMid && dMin <= dMax) target = MIN_H;
+  else if (dMax <= dMid && dMax <= dMin) target = MAX_H;
+
+  sheet.style.transition = "height 220ms cubic-bezier(.2,.8,.2,1)";
+  setSheetHeight(target);
+  setTimeout(() => (sheet.style.transition = ""), 240);
 }
 
-/* =========================
-   BOTTOM SHEET
-========================= */
-.sheet{
-  position: fixed;
-  left: 10px;
-  right: 10px;
-  bottom: 10px;
-  z-index: 1300;
-
-  height: 42vh;
-  max-height: 86vh;
-  min-height: 14vh;
-
-  background: var(--green);
-  color: #fff;
-
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-md);
-
-  display:flex;
-  flex-direction: column;
-  will-change: height;
+function onEnd() {
+  dragging = false;
+  snapToNearest();
+  document.removeEventListener("mousemove", onMove);
+  document.removeEventListener("mouseup", onEnd);
+  document.removeEventListener("touchmove", onMove);
+  document.removeEventListener("touchend", onEnd);
 }
 
-.sheetHandle{
-  width: 64px;
-  height: 6px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.45);
-  margin: 10px auto 10px;
+handle.addEventListener("mousedown", onStart);
+handle.addEventListener("touchstart", onStart, { passive: true });
+
+/* =============================
+   4) UI refs
+============================= */
+const listEl = document.getElementById("list");
+const countEl = document.getElementById("spotCount");
+
+const addSpotBtn = document.getElementById("addSpotBtn");
+const modal = document.getElementById("addSpotModal");
+const closeModalBtn = document.getElementById("closeModal");
+
+const spotNameEl = document.getElementById("spotName");
+const spotAreaEl = document.getElementById("spotArea");
+const iftarTypeEl = document.getElementById("iftarType");
+
+const pickLocationBtn = document.getElementById("pickLocationBtn");
+const pickedLatLngEl = document.getElementById("pickedLatLng");
+const submitSpotBtn = document.getElementById("submitSpotBtn");
+
+/* =============================
+   5) Button text stable
+============================= */
+function syncSubmitBtnState() {
+  if (!submitSpotBtn) return;
+  submitSpotBtn.textContent = "স্পট যোগ করুন";
+  submitSpotBtn.disabled = !auth.currentUser?.uid;
 }
 
-.sheetHeader{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap: 10px;
-  padding: 0 14px 10px;
+onAuthStateChanged(auth, (u) => {
+  me = u;
+  authReady = !!u?.uid;
+  syncSubmitBtnState();
+});
+
+/* =============================
+   6) Data + markers + list
+============================= */
+let spots = [];
+let markerLayer = L.layerGroup().addTo(map);
+
+function escapeHtml(str) {
+  return String(str || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
-.sheetTitle{
-  font-weight: 900;
-  font-size: 18px;
-  display:flex;
-  align-items:center;
-  gap: 10px;
+function getBadge(truth, fake) {
+  const t = Number(truth || 0);
+  const f = Number(fake || 0);
+  if (t === 0 && f === 0) return { text: "নতুন", cls: "neutral", icon: "⏳" };
+  if (f > t) return { text: "ভুয়া", cls: "bad", icon: "⚠️" };
+  return { text: "নিশ্চিত", cls: "good", icon: "✓" };
 }
 
-.sheetMeta{
-  background: rgba(255,255,255,0.18);
-  border: 1px solid rgba(255,255,255,0.22);
-  border-radius: 999px;
-  padding: 8px 12px;
-  font-weight: 900;
+function typeLabel(t) {
+  if (t === "biriyani") return "বিরিয়ানি";
+  if (t === "chinese") return "চাইনিজ";
+  return "মিশ্র";
 }
 
-.list{
-  margin: 0 10px 12px;
-  background: rgba(255,255,255,0.12);
-  border: 1px solid rgba(255,255,255,0.18);
-  border-radius: var(--radius-lg);
-
-  padding: 10px;
-  overflow: auto;
-  flex: 1;
+function typeEmoji(t) {
+  if (t === "biriyani") return "🍛";
+  if (t === "chinese") return "🍜";
+  return "🍽️";
 }
 
-.empty{
-  padding: 14px 12px;
-  border-radius: var(--radius-md);
-  background: rgba(255,255,255,0.14);
-  font-weight: 800;
-  text-align: center;
+async function loadSpotsAndVotes() {
+  const spotSnap = await getDocs(collection(db, "spots"));
+  const newSpots = [];
+  spotSnap.forEach((d) => {
+    const data = d.data() || {};
+    newSpots.push({
+      id: d.id,
+      ...data,
+      truthCount: 0,
+      fakeCount: 0,
+      myVote: null,
+    });
+  });
+
+  const voteSnap = await getDocs(collection(db, "votes"));
+  const votesBySpot = new Map();
+  voteSnap.forEach((d) => {
+    const v = d.data();
+    if (!v?.spotId || !v?.value) return;
+    if (!votesBySpot.has(v.spotId)) votesBySpot.set(v.spotId, []);
+    votesBySpot.get(v.spotId).push(v);
+  });
+
+  for (const s of newSpots) {
+    const arr = votesBySpot.get(s.id) || [];
+    let t = 0,
+      f = 0,
+      my = null;
+    for (const v of arr) {
+      if (v.value === "truth") t++;
+      if (v.value === "fake") f++;
+      if (me?.uid && v.uid === me.uid) my = v.value;
+    }
+    s.truthCount = t;
+    s.fakeCount = f;
+    s.myVote = my;
+    if (!s.iftarType) s.iftarType = "mixed";
+  }
+
+  spots = newSpots;
 }
 
-/* =========================
-   LIST CARD UI
-========================= */
-.card{
-  border-radius: 22px;
-  overflow: hidden;
-  margin-bottom: 14px;
-  box-shadow: 0 10px 22px rgba(2,6,23,0.12);
-  background: transparent;
+function makeFoodPinIcon(iftarType) {
+  const emoji = typeEmoji(iftarType);
+  return L.divIcon({
+    className: "",
+    html: `
+      <div class="foodPin">
+        <div class="foodPinInner">${emoji}</div>
+      </div>
+    `,
+    iconSize: [38, 50],
+    iconAnchor: [19, 48],
+    popupAnchor: [0, -52],
+  });
 }
 
-.cardHeader{
-  background: linear-gradient(135deg, var(--green2), var(--green));
-  color: #fff;
-  padding: 14px 14px 12px;
+function buildPopupHtml(spot) {
+  const truth = spot.truthCount ?? 0;
+  const fake = spot.fakeCount ?? 0;
+  const badge = getBadge(truth, fake);
 
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap: 10px;
-}
-.cardUser{ font-weight: 900; opacity: .95; }
+  const title = escapeHtml(spot.name || "");
+  const area = escapeHtml(spot.area || "");
+  const tLabel = escapeHtml(typeLabel(spot.iftarType || "mixed"));
 
-.cardBadge{
-  font-weight: 900;
-  font-size: 13px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.18);
-  border: 1px solid rgba(255,255,255,0.22);
-  display:flex;
-  align-items:center;
-  gap: 8px;
-  white-space: nowrap;
-}
-.cardBadge.bad{
-  background: rgba(255, 90, 90, 0.18);
-  border-color: rgba(255, 150, 150, 0.25);
-}
-.cardBadge.neutral{ background: rgba(255,255,255,0.14); }
+  return `
+    <div class="spotCard">
+      <div class="spotCardHeader">
+        <div class="left">
+          <div class="u">👤 <span>User</span></div>
+          <div class="spotName">${title}</div>
+        </div>
+        <div class="badge">${badge.icon} ${badge.text}</div>
+      </div>
 
-.cardBody{
-  background: #fff;
-  color: #0f172a;
-  padding: 14px;
-}
+      <div class="spotCardBody">
+        <div class="spotRow">
+          <div>📍 ${area}</div>
+          <div style="color:#64748b;font-weight:800;white-space:nowrap;">
+            ${typeEmoji(spot.iftarType)} ${tLabel}
+          </div>
+        </div>
 
-.title{ font-weight: 900; font-size: 17px; line-height: 1.25; }
-
-.meta{
-  margin-top: 6px;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--muted);
+        <div class="spotActions">
+          <button class="spotAct good" data-act="truth" data-id="${spot.id}">
+            👍 ${truth} সত্যি
+          </button>
+          <button class="spotAct bad" data-act="fake" data-id="${spot.id}">
+            👎 ${fake} ভুয়া
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
-.voteRow{
-  margin-top: 12px;
-  display:flex;
-  gap: 12px;
-  flex-wrap: wrap;
+let openedPopup = null;
+
+function openSpotPopup(latlng, spot) {
+  if (openedPopup) {
+    try {
+      map.closePopup(openedPopup);
+    } catch {}
+    openedPopup = null;
+  }
+
+  const popup = L.popup({
+    className: "spotPopup",
+    closeButton: false,
+    autoPan: true,
+    offset: L.point(0, -10),
+    maxWidth: 360,
+  })
+    .setLatLng(latlng)
+    .setContent(buildPopupHtml(spot));
+
+  openedPopup = popup;
+  popup.openOn(map);
+
+  setTimeout(() => {
+    const root = document.querySelector(".leaflet-popup.spotPopup");
+    if (!root) return;
+    root.querySelectorAll(".spotAct").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const spotId = btn.getAttribute("data-id");
+        const act = btn.getAttribute("data-act");
+        await castVote(spotId, act);
+      });
+    });
+  }, 0);
 }
 
-.voteBtn{
-  flex: 1 1 140px;
-  border: 0;
-  cursor: pointer;
-  border-radius: 999px;
-  padding: 12px 14px;
-
-  font-weight: 900;
-  font-size: 14px;
-  font-family: "Hind Siliguri", system-ui;
-
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap: 8px;
-
-  box-shadow: 0 6px 14px rgba(2,6,23,0.10);
-  transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
-}
-.voteBtn:active{ transform: scale(0.98); }
-.voteBtn.good{ background:#e9f7ee; color:#187a3b; }
-.voteBtn.bad{ background:#fdeaea; color:#b42318; }
-.voteBtn.active{ outline: 3px solid rgba(39,81,48,0.22); }
-.voteBtn:disabled{ cursor:not-allowed; opacity: 0.6; }
-
-/* =========================
-   ✅ CTA ADD BUTTON
-========================= */
-.addSpotBtn{
-  position: fixed;
-  right: 16px;
-  bottom: 118px;
-  z-index: 1400;
-
-  border: none;
-  cursor: pointer;
-
-  border-radius: 999px;
-  padding: 12px 14px;
-
-  background: linear-gradient(135deg, #b77a12, #d39b2c);
-  color: #fff;
-
-  font-weight: 900;
-  font-size: 14px;
-  font-family: "Hind Siliguri", system-ui;
-
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap: 10px;
-
-  box-shadow: 0 12px 26px rgba(2,6,23,0.24);
-  transition: transform 120ms ease;
-}
-.addSpotBtn:active{ transform: scale(0.98); }
-
-/* =========================
-   MODAL
-========================= */
-.modal{
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  background: rgba(2,6,23,0.45);
-
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  padding: 14px;
-}
-.modal.hidden{ display:none; }
-
-.modalCard{
-  width: 100%;
-  max-width: 420px;
-  background: #fff;
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.25);
-  position: relative;
+function renderMarkers() {
+  markerLayer.clearLayers();
+  for (const s of spots) {
+    if (typeof s.lat !== "number" || typeof s.lng !== "number") continue;
+    const icon = makeFoodPinIcon(s.iftarType || "mixed");
+    const m = L.marker([s.lat, s.lng], { icon });
+    m.on("click", () => openSpotPopup([s.lat, s.lng], s));
+    markerLayer.addLayer(m);
+  }
 }
 
-.modalHeader{
-  background: #b77a12;
-  color: #fff;
-  padding: 14px;
-}
-.modalTitle{ font-size: 18px; font-weight: 900; }
-.modalSub{ margin-top: 4px; font-size: 13px; font-weight: 700; opacity: 0.95; }
+function renderList() {
+  countEl.textContent = String(spots.length);
 
-.modalClose{
-  position: absolute;
-  top: 12px;
-  right: 12px;
+  if (!spots.length) {
+    listEl.innerHTML = `<div class="empty">কোনো স্পট নেই</div>`;
+    return;
+  }
 
-  border: 0;
-  background: rgba(255,255,255,0.18);
-  color: #fff;
+  listEl.innerHTML = spots
+    .map((s) => {
+      const truth = s.truthCount ?? 0;
+      const fake = s.fakeCount ?? 0;
+      const badge = getBadge(truth, fake);
+      const tLabel = escapeHtml(typeLabel(s.iftarType || "mixed"));
 
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
+      return `
+      <div class="card" data-spot="${s.id}">
+        <div class="cardHeader">
+          <div class="cardUser">👤 User</div>
+          <div class="cardBadge ${badge.cls}">
+            <span>${badge.icon}</span> ${badge.text}
+          </div>
+        </div>
 
-  font-size: 18px;
-  cursor: pointer;
-  font-weight: 900;
-}
+        <div class="cardBody">
+          <div class="title">${escapeHtml(s.name || "")}</div>
+          <div class="meta">📍 ${escapeHtml(s.area || "")} • ${typeEmoji(s.iftarType)} ${tLabel}</div>
 
-.modalBody{ padding: 14px; }
-.modalBody label{ display:block; font-weight: 800; margin-top: 12px; }
+          <div class="voteRow">
+            <button class="voteBtn good ${s.myVote === "truth" ? "active" : ""}"
+              data-id="${s.id}" data-v="truth" ${authReady ? "" : "disabled"}>
+              👍 ${truth} সত্যি
+            </button>
 
-.modalBody input,
-.modalBody .select{
-  width: 100%;
-  margin-top: 6px;
-  padding: 12px;
+            <button class="voteBtn bad ${s.myVote === "fake" ? "active" : ""}"
+              data-id="${s.id}" data-v="fake" ${authReady ? "" : "disabled"}>
+              👎 ${fake} ভুয়া
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    })
+    .join("");
 
-  border-radius: 14px;
-  border: 1px solid rgba(2,6,23,0.12);
+  listEl.querySelectorAll(".voteBtn").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const spotId = btn.getAttribute("data-id");
+      const value = btn.getAttribute("data-v");
+      await castVote(spotId, value);
+    });
+  });
 
-  font-family: "Hind Siliguri", system-ui;
-  font-weight: 700;
-  outline: none;
-  background: #fff;
-}
-
-.modalBody input:focus,
-.modalBody .select:focus{
-  border-color: rgba(39,81,48,0.35);
-  box-shadow: 0 0 0 4px rgba(39,81,48,0.12);
-}
-
-.pinRow{
-  margin-top: 14px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap: 10px;
-}
-
-.pinText{ font-weight: 800; font-size: 13px; color: #334155; }
-
-.pinBtn{
-  border: 0;
-  background: #eef2f7;
-  border-radius: 999px;
-  padding: 8px 12px;
-  font-weight: 900;
-  cursor: pointer;
-  font-family: "Hind Siliguri", system-ui;
+  listEl.querySelectorAll(".card").forEach((card) => {
+    card.addEventListener("click", () => {
+      const id = card.getAttribute("data-spot");
+      const s = spots.find((x) => x.id === id);
+      if (!s) return;
+      map.setView([s.lat, s.lng], Math.max(map.getZoom(), 14), { animate: true });
+      openSpotPopup([s.lat, s.lng], s);
+    });
+  });
 }
 
-.submitBtn{
-  margin-top: 18px;
-  width: 100%;
-  border: 0;
-  border-radius: 16px;
-  padding: 12px;
-  background: var(--green);
-  color: #fff;
-  font-weight: 900;
-  font-size: 15px;
-  cursor: pointer;
-  font-family: "Hind Siliguri", system-ui;
-}
-.submitBtn:disabled{ opacity: 0.65; cursor: not-allowed; }
+/* =============================
+   Voting
+============================= */
+async function castVote(spotId, value) {
+  try {
+    const u = await ensureAuthReady();
+    me = u;
+    authReady = true;
+  } catch {
+    return;
+  }
 
-/* ✅ PICK MODE: BLUR OFF (no blur) */
-.modal.pickMode{
-  background: rgba(2,6,23,0.06);
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  pointer-events: none; /* map clickable */
-}
-.modal.pickMode .modalCard{
-  opacity: 0.55;
-  transform: scale(0.99);
-  filter: none;
-  pointer-events: none;
-}
+  const voteId = `${spotId}_${me.uid}`;
+  const s = spots.find((x) => x.id === spotId);
+  if (!s) return;
 
-/* =========================
-   FOOD PINS (by type)
-========================= */
-.foodPin{
-  width: 38px;
-  height: 38px;
-  border-radius: 999px;
-  background: linear-gradient(135deg, var(--green2), var(--green));
-  box-shadow: 0 10px 18px rgba(2,6,23,0.20);
-  border: 3px solid rgba(255,255,255,0.95);
-  position: relative;
-}
-.foodPin:after{
-  content:"";
-  position:absolute;
-  left: 50%;
-  bottom: -12px;
-  transform: translateX(-50%) rotate(45deg);
-  width: 16px;
-  height: 16px;
-  background: linear-gradient(135deg, var(--green2), var(--green));
-  border-right: 3px solid rgba(255,255,255,0.95);
-  border-bottom: 3px solid rgba(255,255,255,0.95);
-  border-radius: 4px;
-  box-shadow: 0 10px 18px rgba(2,6,23,0.18);
-}
-.foodPinInner{
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.95);
-  margin: 4px auto 0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-size: 14px;
-  font-weight: 900;
+  if (s.myVote === "truth") s.truthCount = Math.max(0, (s.truthCount || 0) - 1);
+  if (s.myVote === "fake") s.fakeCount = Math.max(0, (s.fakeCount || 0) - 1);
+  if (value === "truth") s.truthCount = (s.truthCount || 0) + 1;
+  if (value === "fake") s.fakeCount = (s.fakeCount || 0) + 1;
+
+  s.myVote = value;
+  renderList();
+
+  try {
+    await setDoc(doc(db, "votes", voteId), {
+      spotId,
+      uid: me.uid,
+      value,
+      createdAt: serverTimestamp(),
+    });
+  } catch (e) {
+    console.error("Vote write failed:", e);
+    await refreshAll();
+  }
 }
 
-/* =========================
-   PREMIUM POPUP
-========================= */
-.leaflet-popup.spotPopup .leaflet-popup-content-wrapper{
-  background: transparent !important;
-  box-shadow: none !important;
-  border-radius: 0 !important;
-  padding: 0 !important;
-}
-.leaflet-popup.spotPopup .leaflet-popup-content{ margin: 0 !important; }
-.leaflet-popup.spotPopup .leaflet-popup-tip{ display:none !important; }
-.leaflet-popup-close-button{ display:none !important; }
+/* =============================
+   Add Spot
+============================= */
+let pickMode = false;
+let pickedLatLng = null;
+let pickPreviewMarker = null;
 
-.spotCard{
-  width: 320px;
-  border-radius: 18px;
-  overflow:hidden;
-  box-shadow: 0 18px 40px rgba(2,6,23,0.22);
+function setPicked(lat, lng) {
+  pickedLatLng = { lat, lng };
+  if (pickedLatLngEl) pickedLatLngEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+
+  if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
+  pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(iftarTypeEl?.value || "mixed") });
+  markerLayer.addLayer(pickPreviewMarker);
 }
 
-.spotCardHeader{
-  background: linear-gradient(135deg, var(--green2), var(--green));
-  color:#fff;
-  padding: 12px 12px 10px;
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap: 10px;
-}
-.spotCardHeader .left{ min-width:0; }
-.spotCardHeader .u{
-  font-weight: 900;
-  opacity: .95;
-  display:flex;
-  align-items:center;
-  gap: 8px;
-}
-.spotCardHeader .spotName{
-  margin-top: 6px;
-  font-weight: 900;
-  font-size: 18px;
-  line-height: 1.15;
-}
-.spotCardHeader .badge{
-  font-weight: 900;
-  font-size: 13px;
-  padding: 7px 10px;
-  border-radius: 999px;
-  background: rgba(255,255,255,0.18);
-  border: 1px solid rgba(255,255,255,0.22);
-  white-space: nowrap;
+function openModal() {
+  modal?.classList.remove("hidden");
+  syncSubmitBtnState();
 }
 
-.spotCardBody{ background:#fff; padding: 12px; }
+function closeModal() {
+  modal?.classList.add("hidden");
+  modal?.classList.remove("pickMode");
+  pickMode = false;
 
-.spotRow{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(2,6,23,0.08);
-  font-weight: 800;
-}
-.spotRow:last-child{ border-bottom: 0; }
+  pickedLatLng = null;
+  if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 ম্যাপ থেকে লোকেশন দিন";
 
-.spotActions{
-  margin-top: 10px;
-  display:flex;
-  gap: 12px;
+  if (pickPreviewMarker) {
+    markerLayer.removeLayer(pickPreviewMarker);
+    pickPreviewMarker = null;
+  }
 }
 
-.spotAct{
-  flex:1;
-  border:0;
-  border-radius: 999px;
-  padding: 11px 12px;
-  font-weight: 900;
-  cursor: pointer;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap: 8px;
-}
-.spotAct.good{ background:#e9f7ee; color:#187a3b; }
-.spotAct.bad{ background:#fdeaea; color:#b42318; }
+addSpotBtn?.addEventListener("click", () => openModal());
+closeModalBtn?.addEventListener("click", closeModal);
 
-@media (max-width: 420px){
-  .brand{ font-size: 16px; padding: 9px 12px; }
-  .countdownPill .time{ font-size: 15px; }
-  .voteBtn{ padding: 11px 12px; font-size: 13px; }
-  .spotCard{ width: 290px; }
-  .addSpotBtn{ right: 12px; bottom: 114px; font-size: 13px; }
+pickLocationBtn?.addEventListener("click", () => {
+  pickMode = true;
+  modal?.classList.add("pickMode");
+  if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
+});
+
+map.on("click", (e) => {
+  const { lat, lng } = e.latlng;
+
+  if (!isInRajshahi(lat, lng)) {
+    if (!modal?.classList.contains("hidden")) {
+      if (pickedLatLngEl) pickedLatLngEl.textContent = "⚠️ রাজশাহীর ভিতরে লোকেশন দিন";
+    }
+    return;
+  }
+
+  // if in pick mode: take coordinate
+  if (pickMode) {
+    pickMode = false;
+    modal?.classList.remove("pickMode");
+    setPicked(lat, lng);
+    return;
+  }
+
+  // otherwise: open form + set coordinate
+  openModal();
+  setPicked(lat, lng);
+});
+
+iftarTypeEl?.addEventListener("change", () => {
+  if (!pickedLatLng) return;
+  const { lat, lng } = pickedLatLng;
+  if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
+  pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(iftarTypeEl.value || "mixed") });
+  markerLayer.addLayer(pickPreviewMarker);
+});
+
+/* =============================
+   Submit Spot (with anti-stuck)
+============================= */
+let submitting = false;
+
+submitSpotBtn?.addEventListener("click", submitSpot);
+
+async function submitSpot() {
+  if (submitting) return;
+  submitting = true;
+
+  // Fail-safe: 12s stuck হলে reset
+  const failSafe = setTimeout(() => {
+    submitSpotBtn.disabled = false;
+    submitSpotBtn.textContent = "⚠️ নেট সমস্যা (আবার চেষ্টা করুন)";
+    submitting = false;
+    setTimeout(syncSubmitBtnState, 1500);
+  }, 12000);
+
+  try {
+    const u = await ensureAuthReady();
+    me = u;
+    authReady = true;
+
+    const name = (spotNameEl?.value || "").trim();
+    const area = (spotAreaEl?.value || "").trim();
+    const iftarType = (iftarTypeEl?.value || "").trim();
+
+    // ✅ তোমার চাওয়া মতো: একটাই মেসেজ
+    if (!name || !area || !iftarType || !pickedLatLng) {
+      submitSpotBtn.disabled = false;
+      submitSpotBtn.textContent = "⚠️ আগে সব ফর্ম ফিলাপ করুন, তারপর সাবমিট দিন";
+
+      // (optional hint) লোকেশন না থাকলে লাইনটা একটু highlight
+      if (!pickedLatLng && pickedLatLngEl) {
+        pickedLatLngEl.style.color = "#b42318";
+        pickedLatLngEl.style.fontWeight = "900";
+      }
+
+      setTimeout(() => {
+        if (pickedLatLngEl) {
+          pickedLatLngEl.style.color = "";
+          pickedLatLngEl.style.fontWeight = "";
+        }
+        syncSubmitBtnState();
+      }, 1500);
+
+      return;
+    }
+
+    if (!isInRajshahi(pickedLatLng.lat, pickedLatLng.lng)) {
+      submitSpotBtn.disabled = false;
+      submitSpotBtn.textContent = "⚠️ রাজশাহীর ভিতরে লোকেশন দিন";
+      setTimeout(syncSubmitBtnState, 1200);
+      return;
+    }
+
+    submitSpotBtn.disabled = true;
+    submitSpotBtn.textContent = "⏳ সাবমিট হচ্ছে…";
+
+    // ✅ addDoc timeout যাতে forever stuck না হয়
+    const docRef = await withTimeout(
+      addDoc(collection(db, "spots"), {
+        name,
+        area,
+        iftarType,
+        lat: pickedLatLng.lat,
+        lng: pickedLatLng.lng,
+        createdBy: me.uid,
+        createdAt: serverTimestamp(),
+      }),
+      9000,
+      "Firestore timeout"
+    );
+
+    spots.unshift({
+      id: docRef.id,
+      name,
+      area,
+      iftarType,
+      lat: pickedLatLng.lat,
+      lng: pickedLatLng.lng,
+      createdBy: me.uid,
+      createdAt: new Date(),
+      truthCount: 0,
+      fakeCount: 0,
+      myVote: null,
+    });
+
+    renderMarkers();
+    renderList();
+
+    // reset form
+    if (spotNameEl) spotNameEl.value = "";
+    if (spotAreaEl) spotAreaEl.value = "";
+    if (iftarTypeEl) iftarTypeEl.value = "";
+
+    closeModal();
+  } catch (e) {
+    console.error("Submit failed:", e);
+    submitSpotBtn.disabled = false;
+
+    const msg = String(e?.message || "").toLowerCase();
+    if (msg.includes("permission")) submitSpotBtn.textContent = "⚠️ Permission denied";
+    else if (msg.includes("timeout")) submitSpotBtn.textContent = "⚠️ নেট স্লো (আবার চেষ্টা করুন)";
+    else submitSpotBtn.textContent = "⚠️ সাবমিট হয়নি (আবার চেষ্টা করুন)";
+
+    setTimeout(syncSubmitBtnState, 1400);
+  } finally {
+    clearTimeout(failSafe);
+    submitting = false;
+    syncSubmitBtnState();
+  }
 }
+
+/* =============================
+   Boot
+============================= */
+async function refreshAll() {
+  await loadSpotsAndVotes();
+  renderMarkers();
+  renderList();
+}
+
+function waitForTilesLoaded(timeoutMs = 9000) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (!done) {
+        done = true;
+        resolve(true);
+      }
+    };
+    tiles.once("load", finish);
+    setTimeout(finish, timeoutMs);
+  });
+}
+
+(async function boot() {
+  try {
+    await refreshAll();
+    await waitForTilesLoaded();
+    setTimeout(hideLoading, 250);
+  } catch (e) {
+    console.error("Boot error:", e);
+    listEl.innerHTML = `<div class="empty">ডাটা লোড হচ্ছে না</div>`;
+    setTimeout(hideLoading, 1200);
+  }
+})();
