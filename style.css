@@ -732,3 +732,9 @@ body{
     height: 22px;
   }
 }
+
+button, .card, .spotAct, .voteBtn, .pinBtn, .submitBtn, .addSpotBtn, .modalClose, .sheetHandle, .sheetMeta{
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
