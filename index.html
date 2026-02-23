@@ -1,88 +1,98 @@
- (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
-diff --git a/index.html b/index.html
-index e88b16dcf5551985a23acb23576b123d2a78512a..557e3d9db7d1c589cdd18c35f9623bafd8239460 100644
---- a/index.html
-+++ b/index.html
-@@ -1,35 +1,40 @@
- <!doctype html>
- <html lang="bn">
- <head>
-   <meta charset="utf-8" />
-   <meta name="viewport" content="width=device-width,initial-scale=1" />
-   <title>Free Iftar</title>
- 
-   <link rel="preconnect" href="https://fonts.googleapis.com">
-   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-   <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700;800;900&display=swap" rel="stylesheet">
-+  <link rel="dns-prefetch" href="//www.gstatic.com">
-+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
-+  <link rel="dns-prefetch" href="//firestore.googleapis.com">
-+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
-+  <link rel="dns-prefetch" href="//identitytoolkit.googleapis.com">
- 
-   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-   <link rel="stylesheet" href="./style.css" />
- </head>
- 
- <body>
-   <!-- Loading -->
-   <div id="loadingOverlay" class="loadingOverlay">
-     <div class="loadingCard">
-       <div class="loadingIcon">🍛</div>
-       <div class="loadingTitle">রাজশাহীতে ফ্রি ইফতার খোঁজা হচ্ছে…</div>
-       <div class="loadingSub">অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুনে</div>
-       <div class="loadingBar"><span></span></div>
-     </div>
-   </div>
- 
-   <!-- Topbar -->
-   <header class="topbar">
-     <div class="brand">🌙 Free Iftar</div>
- 
-     <div class="countdownPill">
-       <div class="label">ইফতার বাকি</div>
-       <div id="countdown" class="time">--</div>
-     </div>
-   </header>
-@@ -65,29 +70,37 @@
- 
-       <div class="modalBody">
-         <label>স্পটের নাম *</label>
-         <input id="spotName" placeholder="উদাহরণ: আল-আমিন মসজিদ" />
- 
-         <label>এলাকা *</label>
-         <input id="spotArea" placeholder="উদাহরণ: সাহেব বাজার" />
- 
-         <label>ইফতারের ধরন *</label>
-         <select id="iftarType" class="select">
-           <option value="mixed">মিশ্র</option>
-           <option value="biriyani">বিরিয়ানি</option>
-           <option value="chinese">চাইনিজ</option>
-         </select>
- 
-         <div class="pinRow">
-           <div id="pickedLatLng" class="pinText">📍 ম্যাপ থেকে লোকেশন দিন</div>
-           <button id="pickLocationBtn" class="pinBtn">ম্যাপ থেকে নিন</button>
-         </div>
- 
-         <button id="submitSpotBtn" class="submitBtn">স্পট যোগ করুন</button>
-       </div>
-     </div>
-   </div>
- 
--  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-+
-+
-+  <a class="telegramFab" href="https://t.me/RuSubcription" target="_blank" rel="noopener noreferrer" aria-label="Telegram">
-+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-+      <path d="M9.04 15.04 8.7 19.8c.48 0 .69-.2.94-.45l2.25-2.15 4.66 3.41c.85.47 1.45.22 1.68-.79l3.05-14.3h.01c.27-1.26-.45-1.76-1.28-1.45L1.83 10.52c-1.24.48-1.22 1.17-.21 1.49l4.63 1.45L17 6.65c.51-.34.97-.15.58.19" fill="currentColor"/>
-+    </svg>
-+  </a>
-+
-+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-   <script type="module" src="./app.js"></script>
- </body>
- </html>
- 
-EOF
-)
+<!doctype html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Free Iftar</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="dns-prefetch" href="//www.gstatic.com">
+  <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+  <link rel="dns-prefetch" href="//firestore.googleapis.com">
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+  <link rel="dns-prefetch" href="//identitytoolkit.googleapis.com">
+
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+
+<body>
+  <!-- Loading -->
+  <div id="loadingOverlay" class="loadingOverlay">
+    <div class="loadingCard">
+      <div class="loadingIcon">🍛</div>
+      <div class="loadingTitle">রাজশাহীতে ফ্রি ইফতার খোঁজা হচ্ছে…</div>
+      <div class="loadingSub">অনুগ্রহ করে কিছুক্ষণ অপেক্ষা করুনে</div>
+      <div class="loadingBar"><span></span></div>
+    </div>
+  </div>
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="brand">🌙 Free Iftar</div>
+
+    <div class="countdownPill">
+      <div class="label">ইফতার বাকি</div>
+      <div id="countdown" class="time">--</div>
+    </div>
+  </header>
+
+  <!-- Map -->
+  <div id="map"></div>
+
+  <!-- Floating add button -->
+  <button id="addSpotBtn" class="addSpotBtn">➕ স্পট যোগ</button>
+
+  <!-- Bottom sheet -->
+  <section id="sheet" class="sheet">
+    <div id="sheetHandle" class="sheetHandle"></div>
+
+    <div class="sheetHeader">
+      <div class="sheetTitle">🍽️ আজকের স্পট</div>
+      <div class="sheetMeta"><span id="spotCount">0</span> টি</div>
+    </div>
+
+    <div id="list" class="list">
+      <div class="empty">লোড হচ্ছে…</div>
+    </div>
+  </section>
+
+  <!-- Add spot modal -->
+  <div id="addSpotModal" class="modal hidden">
+    <div class="modalCard">
+      <div class="modalHeader">
+        <div class="modalTitle">📍 ইফতার স্পট যোগ করুন</div>
+        <div class="modalSub">নাম, এলাকা এবং লোকেশন দিন</div>
+        <button id="closeModal" class="modalClose">✕</button>
+      </div>
+
+      <div class="modalBody">
+        <label>স্পটের নাম *</label>
+        <input id="spotName" placeholder="উদাহরণ: আল-আমিন মসজিদ" />
+
+        <label>এলাকা *</label>
+        <input id="spotArea" placeholder="উদাহরণ: সাহেব বাজার" />
+
+        <label>ইফতারের ধরন *</label>
+        <select id="iftarType" class="select">
+          <option value="mixed">মিশ্র</option>
+          <option value="biriyani">বিরিয়ানি</option>
+          <option value="chinese">চাইনিজ</option>
+        </select>
+
+        <div class="pinRow">
+          <div id="pickedLatLng" class="pinText">📍 ম্যাপ থেকে লোকেশন দিন</div>
+          <button id="pickLocationBtn" class="pinBtn">ম্যাপ থেকে নিন</button>
+        </div>
+
+        <button id="submitSpotBtn" class="submitBtn">স্পট যোগ করুন</button>
+      </div>
+    </div>
+  </div>
+
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
