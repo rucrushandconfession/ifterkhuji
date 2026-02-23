@@ -19,7 +19,7 @@
 
 <body>
 
-  <!-- ✅ LOADING OVERLAY (NEW) -->
+  <!-- ✅ LOADING OVERLAY -->
   <div id="loadingOverlay" class="loadingOverlay" aria-label="লোডিং">
     <div class="loadingCard">
       <div class="loadingIcon">🍽️</div>
@@ -46,31 +46,21 @@
   ========================== -->
   <div id="map"></div>
 
-  <!-- =========================
-       ADD SPOT FLOATING BUTTON
-  ========================== -->
+  <!-- ✅ CTA ADD BUTTON (TEXT + COLOR CHANGE) -->
   <button
     id="addSpotBtn"
     class="addSpotBtn"
-    title="স্পট যোগ করুন"
-    aria-label="স্পট যোগ করুন"
+    title="ইফতার স্পট যোগ করতে এখানে ক্লিক করুন"
+    aria-label="ইফতার স্পট যোগ করতে এখানে ক্লিক করুন"
   >
-    ➕
+    🍽️ ইফতার স্পট যোগ করতে এখানে ক্লিক করুন
   </button>
 
   <!-- =========================
        BOTTOM SHEET
   ========================== -->
-  <section
-    id="sheet"
-    class="sheet"
-    aria-label="আজকের সক্রিয় ইফতার"
-  >
-    <div
-      id="sheetHandle"
-      class="sheetHandle"
-      aria-label="drag handle"
-    ></div>
+  <section id="sheet" class="sheet" aria-label="আজকের সক্রিয় ইফতার">
+    <div id="sheetHandle" class="sheetHandle" aria-label="drag handle"></div>
 
     <div class="sheetHeader">
       <div class="sheetTitle">🍽️ আজকের সক্রিয় ইফতার</div>
@@ -104,6 +94,15 @@
 
         <label>এলাকা *</label>
         <input id="spotArea" placeholder="উদাহরণ: কাজলা, রাজশাহী" />
+
+        <!-- ✅ NEW: IFTAR TYPE -->
+        <label>ইফতারের ধরণ *</label>
+        <select id="iftarType" class="select">
+          <option value="" selected>ইফতারের ধরণ নির্বাচন করুন</option>
+          <option value="biriyani">বিরিয়ানি</option>
+          <option value="chinese">চাইনিজ</option>
+          <option value="mixed">মিশ্র</option>
+        </select>
 
         <div class="pinRow">
           <div id="pickedLatLng" class="pinText">📍 ম্যাপ থেকে লোকেশন দিন</div>
