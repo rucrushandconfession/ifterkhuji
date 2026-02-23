@@ -1,7 +1,3 @@
-// =============================
-// app.js (FULL REPLACE)
-// =============================
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import {
   getFirestore,
@@ -18,9 +14,7 @@ import {
   onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-/* =============================
-   0) Firebase Config
-============================= */
+/* Firebase Config */
 const firebaseConfig = {
   apiKey: "AIzaSyA6SZeKVmNAsd4eAlieCTC7zQzYMenwJEA",
   authDomain: "free-ifter.firebaseapp.com",
@@ -38,17 +32,13 @@ const auth = getAuth(fbApp);
 let me = null;
 let authReady = false;
 
-/* =============================
-   Loading overlay
-============================= */
+/* Loading overlay */
 const loadingOverlay = document.getElementById("loadingOverlay");
 const showLoading = () => loadingOverlay?.classList.remove("hidden");
 const hideLoading = () => loadingOverlay?.classList.add("hidden");
 showLoading();
 
-/* =============================
-   Helper: ensure auth ready
-============================= */
+/* Helpers */
 function ensureAuthReady(timeoutMs = 8000) {
   return new Promise((resolve, reject) => {
     if (auth.currentUser?.uid) return resolve(auth.currentUser);
@@ -68,9 +58,6 @@ function ensureAuthReady(timeoutMs = 8000) {
   });
 }
 
-/* =============================
-   Helper: promise timeout
-============================= */
 function withTimeout(promise, ms, msg = "Timeout") {
   let t;
   const timeoutPromise = new Promise((_, reject) => {
@@ -79,12 +66,22 @@ function withTimeout(promise, ms, msg = "Timeout") {
   return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(t));
 }
 
-/* Start anonymous auth */
+/* ✅ safer input read */
+function v(el) {
+  return (el?.value || "").trim();
+}
+
+/* ✅ show message on submit button (empty form feedback) */
+function flashBtn(msg, ms = 1100) {
+  if (!submitSpotBtn) return;
+  submitSpotBtn.disabled = false;
+  submitSpotBtn.textContent = msg;
+  setTimeout(syncSubmitBtnState, ms);
+}
+
 signInAnonymously(auth).catch((e) => console.error("Anonymous auth error:", e));
 
-/* =============================
-   1) Map (Rajshahi)
-============================= */
+/* Map */
 const rajshahiCenter = [24.3745, 88.6042];
 const rajshahiBounds = L.latLngBounds([24.30, 88.50], [24.45, 88.70]);
 
@@ -109,11 +106,8 @@ function isInRajshahi(lat, lng) {
   return lat >= 24.30 && lat <= 24.45 && lng >= 88.50 && lng <= 88.70;
 }
 
-/* =============================
-   2) Countdown
-============================= */
+/* Countdown */
 const countdownEl = document.getElementById("countdown");
-
 async function startCountdown() {
   try {
     const res = await fetch(
@@ -136,49 +130,44 @@ async function startCountdown() {
       const m = Math.floor((diff % 3600000) / 60000);
       const s = Math.floor((diff % 60000) / 1000);
 
-      countdownEl.textContent = `${h}ঘ ${m}মি ${s}সে`;
+      if (countdownEl) countdownEl.textContent = `${h}ঘ ${m}মি ${s}সে`;
     }, 1000);
   } catch (e) {
-    console.warn("Countdown error:", e);
-    countdownEl.textContent = "--";
+    if (countdownEl) countdownEl.textContent = "--";
   }
 }
 startCountdown();
 
-/* =============================
-   3) Bottom Sheet Drag
-============================= */
+/* Bottom sheet drag */
 const sheet = document.getElementById("sheet");
 const handle = document.getElementById("sheetHandle");
-
 const MIN_H = Math.round(window.innerHeight * 0.16);
 const MID_H = Math.round(window.innerHeight * 0.42);
 const MAX_H = Math.round(window.innerHeight * 0.86);
-
 let currentH = MID_H;
-sheet.style.height = `${currentH}px`;
+
+if (sheet) sheet.style.height = `${currentH}px`;
 
 function setSheetHeight(h) {
+  if (!sheet) return;
   currentH = Math.max(MIN_H, Math.min(MAX_H, h));
   sheet.style.height = `${currentH}px`;
 }
-
-let startY = 0;
-let startH = 0;
-let dragging = false;
+let startY = 0,
+  startH = 0,
+  dragging = false;
 
 function onStart(e) {
+  if (!sheet) return;
   dragging = true;
   sheet.style.transition = "none";
   startY = e.touches ? e.touches[0].clientY : e.clientY;
   startH = currentH;
-
   document.addEventListener("mousemove", onMove);
   document.addEventListener("mouseup", onEnd);
   document.addEventListener("touchmove", onMove, { passive: false });
   document.addEventListener("touchend", onEnd);
 }
-
 function onMove(e) {
   if (!dragging) return;
   if (e.cancelable) e.preventDefault();
@@ -186,8 +175,8 @@ function onMove(e) {
   const dy = startY - y;
   setSheetHeight(startH + dy);
 }
-
 function snapToNearest() {
+  if (!sheet) return;
   const dMin = Math.abs(currentH - MIN_H);
   const dMid = Math.abs(currentH - MID_H);
   const dMax = Math.abs(currentH - MAX_H);
@@ -199,7 +188,6 @@ function snapToNearest() {
   setSheetHeight(target);
   setTimeout(() => (sheet.style.transition = ""), 240);
 }
-
 function onEnd() {
   dragging = false;
   snapToNearest();
@@ -208,31 +196,23 @@ function onEnd() {
   document.removeEventListener("touchmove", onMove);
   document.removeEventListener("touchend", onEnd);
 }
+handle?.addEventListener("mousedown", onStart);
+handle?.addEventListener("touchstart", onStart, { passive: true });
 
-handle.addEventListener("mousedown", onStart);
-handle.addEventListener("touchstart", onStart, { passive: true });
-
-/* =============================
-   4) UI refs
-============================= */
+/* UI refs */
 const listEl = document.getElementById("list");
 const countEl = document.getElementById("spotCount");
-
 const addSpotBtn = document.getElementById("addSpotBtn");
 const modal = document.getElementById("addSpotModal");
 const closeModalBtn = document.getElementById("closeModal");
-
 const spotNameEl = document.getElementById("spotName");
 const spotAreaEl = document.getElementById("spotArea");
-const iftarTypeEl = document.getElementById("iftarType");
-
+const iftarTypeEl = document.getElementById("iftarType"); // may not exist in some html
 const pickLocationBtn = document.getElementById("pickLocationBtn");
 const pickedLatLngEl = document.getElementById("pickedLatLng");
 const submitSpotBtn = document.getElementById("submitSpotBtn");
 
-/* =============================
-   5) Button text stable
-============================= */
+/* Button state (never show “সাইনিং হচ্ছে…”) */
 function syncSubmitBtnState() {
   if (!submitSpotBtn) return;
   submitSpotBtn.textContent = "স্পট যোগ করুন";
@@ -245,9 +225,7 @@ onAuthStateChanged(auth, (u) => {
   syncSubmitBtnState();
 });
 
-/* =============================
-   6) Data + markers + list
-============================= */
+/* Data */
 let spots = [];
 let markerLayer = L.layerGroup().addTo(map);
 
@@ -273,7 +251,6 @@ function typeLabel(t) {
   if (t === "chinese") return "চাইনিজ";
   return "মিশ্র";
 }
-
 function typeEmoji(t) {
   if (t === "biriyani") return "🍛";
   if (t === "chinese") return "🍜";
@@ -308,10 +285,10 @@ async function loadSpotsAndVotes() {
     let t = 0,
       f = 0,
       my = null;
-    for (const v of arr) {
-      if (v.value === "truth") t++;
-      if (v.value === "fake") f++;
-      if (me?.uid && v.uid === me.uid) my = v.value;
+    for (const v0 of arr) {
+      if (v0.value === "truth") t++;
+      if (v0.value === "fake") f++;
+      if (me?.uid && v0.uid === me.uid) my = v0.value;
     }
     s.truthCount = t;
     s.fakeCount = f;
@@ -322,21 +299,19 @@ async function loadSpotsAndVotes() {
   spots = newSpots;
 }
 
+/* Pins */
 function makeFoodPinIcon(iftarType) {
   const emoji = typeEmoji(iftarType);
   return L.divIcon({
     className: "",
-    html: `
-      <div class="foodPin">
-        <div class="foodPinInner">${emoji}</div>
-      </div>
-    `,
+    html: `<div class="foodPin"><div class="foodPinInner">${emoji}</div></div>`,
     iconSize: [38, 50],
     iconAnchor: [19, 48],
     popupAnchor: [0, -52],
   });
 }
 
+/* Popup */
 function buildPopupHtml(spot) {
   const truth = spot.truthCount ?? 0;
   const fake = spot.fakeCount ?? 0;
@@ -415,6 +390,7 @@ function openSpotPopup(latlng, spot) {
   }, 0);
 }
 
+/* Render */
 function renderMarkers() {
   markerLayer.clearLayers();
   for (const s of spots) {
@@ -427,7 +403,9 @@ function renderMarkers() {
 }
 
 function renderList() {
-  countEl.textContent = String(spots.length);
+  if (countEl) countEl.textContent = String(spots.length);
+
+  if (!listEl) return;
 
   if (!spots.length) {
     listEl.innerHTML = `<div class="empty">কোনো স্পট নেই</div>`;
@@ -452,7 +430,9 @@ function renderList() {
 
         <div class="cardBody">
           <div class="title">${escapeHtml(s.name || "")}</div>
-          <div class="meta">📍 ${escapeHtml(s.area || "")} • ${typeEmoji(s.iftarType)} ${tLabel}</div>
+          <div class="meta">📍 ${escapeHtml(s.area || "")} • ${typeEmoji(
+        s.iftarType
+      )} ${tLabel}</div>
 
           <div class="voteRow">
             <button class="voteBtn good ${s.myVote === "truth" ? "active" : ""}"
@@ -491,9 +471,7 @@ function renderList() {
   });
 }
 
-/* =============================
-   Voting
-============================= */
+/* Voting */
 async function castVote(spotId, value) {
   try {
     const u = await ensureAuthReady();
@@ -528,34 +506,56 @@ async function castVote(spotId, value) {
   }
 }
 
-/* =============================
-   Add Spot
-============================= */
+/* Add Spot (map click + pick mode) */
 let pickMode = false;
 let pickedLatLng = null;
 let pickPreviewMarker = null;
 
+/* ✅ pick toast */
+let pickToastEl = null;
+function showPickToast() {
+  if (pickToastEl) return;
+  pickToastEl = document.createElement("div");
+  pickToastEl.className = "pickToast";
+  pickToastEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
+  document.body.appendChild(pickToastEl);
+}
+function hidePickToast() {
+  pickToastEl?.remove();
+  pickToastEl = null;
+}
+
 function setPicked(lat, lng) {
   pickedLatLng = { lat, lng };
-  if (pickedLatLngEl) pickedLatLngEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  if (pickedLatLngEl) {
+    pickedLatLngEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+  }
 
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
-  pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(iftarTypeEl?.value || "mixed") });
+
+  const currentType = v(iftarTypeEl) || "mixed";
+  pickPreviewMarker = L.marker([lat, lng], {
+    icon: makeFoodPinIcon(currentType),
+  });
   markerLayer.addLayer(pickPreviewMarker);
 }
 
 function openModal() {
-  modal?.classList.remove("hidden");
+  if (!modal) return;
+  modal.classList.remove("hidden");
   syncSubmitBtnState();
 }
 
 function closeModal() {
-  modal?.classList.add("hidden");
-  modal?.classList.remove("pickMode");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  modal.classList.remove("pickMode");
+  modal.classList.remove("picking"); // ✅ ensure pick overlay removed
   pickMode = false;
-
   pickedLatLng = null;
   if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 ম্যাপ থেকে লোকেশন দিন";
+
+  hidePickToast();
 
   if (pickPreviewMarker) {
     markerLayer.removeLayer(pickPreviewMarker);
@@ -566,46 +566,53 @@ function closeModal() {
 addSpotBtn?.addEventListener("click", () => openModal());
 closeModalBtn?.addEventListener("click", closeModal);
 
+/* ✅ “ম্যাপ থেকে নিন” => modal hide so map looks clear */
 pickLocationBtn?.addEventListener("click", () => {
   pickMode = true;
-  modal?.classList.add("pickMode");
+
+  // ✅ map clear (requires your CSS for .modal.picking)
+  modal?.classList.add("picking");
+  modal?.classList.remove("pickMode");
+
   if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
+  showPickToast();
 });
 
 map.on("click", (e) => {
   const { lat, lng } = e.latlng;
 
   if (!isInRajshahi(lat, lng)) {
-    if (!modal?.classList.contains("hidden")) {
+    if (modal && !modal.classList.contains("hidden")) {
       if (pickedLatLngEl) pickedLatLngEl.textContent = "⚠️ রাজশাহীর ভিতরে লোকেশন দিন";
     }
     return;
   }
 
-  // if in pick mode: take coordinate
+  // ✅ if we are in pick mode, just pick and show modal again
   if (pickMode) {
     pickMode = false;
-    modal?.classList.remove("pickMode");
+    modal?.classList.remove("picking"); // ✅ bring modal back (CSS hides in picking)
+    hidePickToast();
     setPicked(lat, lng);
     return;
   }
 
-  // otherwise: open form + set coordinate
+  // normal map click => open modal and set picked
   openModal();
   setPicked(lat, lng);
 });
 
+/* iftar type change (safe if element missing) */
 iftarTypeEl?.addEventListener("change", () => {
   if (!pickedLatLng) return;
   const { lat, lng } = pickedLatLng;
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
-  pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(iftarTypeEl.value || "mixed") });
+  const currentType = v(iftarTypeEl) || "mixed";
+  pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(currentType) });
   markerLayer.addLayer(pickPreviewMarker);
 });
 
-/* =============================
-   Submit Spot (with anti-stuck)
-============================= */
+/* ✅ Submit stuck fix + empty form messages */
 let submitting = false;
 
 submitSpotBtn?.addEventListener("click", submitSpot);
@@ -614,10 +621,11 @@ async function submitSpot() {
   if (submitting) return;
   submitting = true;
 
-  // Fail-safe: 12s stuck হলে reset
   const failSafe = setTimeout(() => {
-    submitSpotBtn.disabled = false;
-    submitSpotBtn.textContent = "⚠️ নেট সমস্যা (আবার চেষ্টা করুন)";
+    if (submitSpotBtn) {
+      submitSpotBtn.disabled = false;
+      submitSpotBtn.textContent = "⚠️ নেট সমস্যা (আবার চেষ্টা করুন)";
+    }
     submitting = false;
     setTimeout(syncSubmitBtnState, 1500);
   }, 12000);
@@ -627,43 +635,24 @@ async function submitSpot() {
     me = u;
     authReady = true;
 
-    const name = (spotNameEl?.value || "").trim();
-    const area = (spotAreaEl?.value || "").trim();
-    const iftarType = (iftarTypeEl?.value || "").trim();
+    const name = v(spotNameEl);
+    const area = v(spotAreaEl);
+    const iftarType = v(iftarTypeEl) || "mixed"; // ✅ if select missing, use mixed
 
-    // ✅ তোমার চাওয়া মতো: একটাই মেসেজ
-    if (!name || !area || !iftarType || !pickedLatLng) {
-      submitSpotBtn.disabled = false;
-      submitSpotBtn.textContent = "⚠️ আগে সব ফর্ম ফিলাপ করুন, তারপর সাবমিট দিন";
-
-      // (optional hint) লোকেশন না থাকলে লাইনটা একটু highlight
-      if (!pickedLatLng && pickedLatLngEl) {
-        pickedLatLngEl.style.color = "#b42318";
-        pickedLatLngEl.style.fontWeight = "900";
-      }
-
-      setTimeout(() => {
-        if (pickedLatLngEl) {
-          pickedLatLngEl.style.color = "";
-          pickedLatLngEl.style.fontWeight = "";
-        }
-        syncSubmitBtnState();
-      }, 1500);
-
-      return;
-    }
+    // ✅ empty validation: always show message
+    if (!name) return flashBtn("⚠️ স্পটের নাম দিন");
+    if (!area) return flashBtn("⚠️ এলাকা দিন");
+    if (!pickedLatLng) return flashBtn("⚠️ লোকেশন দিন");
 
     if (!isInRajshahi(pickedLatLng.lat, pickedLatLng.lng)) {
-      submitSpotBtn.disabled = false;
-      submitSpotBtn.textContent = "⚠️ রাজশাহীর ভিতরে লোকেশন দিন";
-      setTimeout(syncSubmitBtnState, 1200);
-      return;
+      return flashBtn("⚠️ রাজশাহীর ভিতরে দিন");
     }
 
-    submitSpotBtn.disabled = true;
-    submitSpotBtn.textContent = "⏳ সাবমিট হচ্ছে…";
+    if (submitSpotBtn) {
+      submitSpotBtn.disabled = true;
+      submitSpotBtn.textContent = "⏳ সাবমিট হচ্ছে…";
+    }
 
-    // ✅ addDoc timeout যাতে forever stuck না হয়
     const docRef = await withTimeout(
       addDoc(collection(db, "spots"), {
         name,
@@ -695,7 +684,6 @@ async function submitSpot() {
     renderMarkers();
     renderList();
 
-    // reset form
     if (spotNameEl) spotNameEl.value = "";
     if (spotAreaEl) spotAreaEl.value = "";
     if (iftarTypeEl) iftarTypeEl.value = "";
@@ -703,14 +691,12 @@ async function submitSpot() {
     closeModal();
   } catch (e) {
     console.error("Submit failed:", e);
-    submitSpotBtn.disabled = false;
+    if (submitSpotBtn) submitSpotBtn.disabled = false;
 
     const msg = String(e?.message || "").toLowerCase();
-    if (msg.includes("permission")) submitSpotBtn.textContent = "⚠️ Permission denied";
-    else if (msg.includes("timeout")) submitSpotBtn.textContent = "⚠️ নেট স্লো (আবার চেষ্টা করুন)";
-    else submitSpotBtn.textContent = "⚠️ সাবমিট হয়নি (আবার চেষ্টা করুন)";
-
-    setTimeout(syncSubmitBtnState, 1400);
+    if (msg.includes("permission")) flashBtn("⚠️ Permission denied", 1400);
+    else if (msg.includes("timeout")) flashBtn("⚠️ নেট স্লো (আবার চেষ্টা করুন)", 1400);
+    else flashBtn("⚠️ সাবমিট হয়নি (আবার চেষ্টা করুন)", 1400);
   } finally {
     clearTimeout(failSafe);
     submitting = false;
@@ -718,9 +704,7 @@ async function submitSpot() {
   }
 }
 
-/* =============================
-   Boot
-============================= */
+/* Boot */
 async function refreshAll() {
   await loadSpotsAndVotes();
   renderMarkers();
@@ -748,7 +732,7 @@ function waitForTilesLoaded(timeoutMs = 9000) {
     setTimeout(hideLoading, 250);
   } catch (e) {
     console.error("Boot error:", e);
-    listEl.innerHTML = `<div class="empty">ডাটা লোড হচ্ছে না</div>`;
+    if (listEl) listEl.innerHTML = `<div class="empty">ডাটা লোড হচ্ছে না</div>`;
     setTimeout(hideLoading, 1200);
   }
 })();
