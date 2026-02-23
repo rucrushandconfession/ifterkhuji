@@ -105,6 +105,18 @@ function toMillis(value) {
   return Number.isNaN(d.getTime()) ? 0 : d.getTime();
 }
 
+function getLocalTodayString(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function isSpotForToday(spot, todayString = getLocalTodayString()) {
+  const dateValue = spot?.iftarDate;
+  return !dateValue || dateValue === todayString;
+}
+
 function normalizeText(value) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
@@ -344,6 +356,7 @@ const closeModalBtn = document.getElementById("closeModal");
 const spotNameEl = document.getElementById("spotName");
 const spotAreaEl = document.getElementById("spotArea");
 const iftarTypeEl = document.getElementById("iftarType");
+const iftarDateEl = document.getElementById("iftarDate");
 const pickLocationBtn = document.getElementById("pickLocationBtn");
 const pickedLatLngEl = document.getElementById("pickedLatLng");
 const submitSpotBtn = document.getElementById("submitSpotBtn");
@@ -472,7 +485,7 @@ function showValidationFeedback(message) {
 }
 
 function clearInvalidStyles() {
-  [spotNameEl, spotAreaEl, iftarTypeEl, pickLocationBtn].forEach((field) => {
+  [spotNameEl, spotAreaEl, iftarTypeEl, iftarDateEl, pickLocationBtn].forEach((field) => {
     field?.classList.remove("field-invalid");
   });
 }
@@ -494,10 +507,12 @@ function getValidationIssue() {
   const name = (spotNameEl?.value || "").trim();
   const area = (spotAreaEl?.value || "").trim();
   const iftarType = (iftarTypeEl?.value || "").trim();
+  const iftarDate = (iftarDateEl?.value || "").trim();
 
   if (!name) return { message: "নাম লিখুন", field: spotNameEl };
   if (!area) return { message: "এলাকা লিখুন", field: spotAreaEl };
   if (!iftarType) return { message: "ইফতারের ধরন দিন", field: iftarTypeEl };
+  if (!iftarDate) return { message: "তারিখ দিন", field: iftarDateEl };
   if (!pickedLatLng) return { message: "ম্যাপে লোকেশন দিন", field: pickLocationBtn };
 
   return null;
@@ -539,6 +554,10 @@ iftarTypeEl?.addEventListener("change", () => iftarTypeEl.classList.remove("fiel
   passive: true,
 });
 
+iftarDateEl?.addEventListener("input", () => iftarDateEl.classList.remove("field-invalid"), {
+  passive: true,
+});
+
 pickLocationBtn?.addEventListener(
   "click",
   () => {
@@ -566,6 +585,7 @@ function flashBtn(msg, ms = 1200) {
 }
 
 /* Data */
+let allSpots = [];
 let spots = [];
 let spotsById = new Map();
 const markerLayer = L.layerGroup().addTo(map);
@@ -745,7 +765,9 @@ async function loadSpotsAndVotes() {
     if (!s.iftarType) s.iftarType = "mixed";
   }
 
-  spots = nextSpots;
+  allSpots = nextSpots;
+  const todayString = getLocalTodayString();
+  spots = allSpots.filter((spot) => isSpotForToday(spot, todayString));
   sortSpotsInPlace();
   spotsById = new Map(spots.map((spot) => [spot.id, spot]));
 }
@@ -997,6 +1019,7 @@ function setPicked(lat, lng) {
 
 function openModal() {
   modal.classList.remove("hidden");
+  if (iftarDateEl) iftarDateEl.value = getLocalTodayString();
   syncSubmitBtnState();
 }
 function closeModal() {
@@ -1007,6 +1030,7 @@ function closeModal() {
   pickMode = false;
   pickedLatLng = null;
   pickedLatLngEl.textContent = "📍 ম্যাপ থেকে লোকেশন দিন";
+  if (iftarDateEl) iftarDateEl.value = getLocalTodayString();
   if (pickPreviewMarker) {
     markerLayer.removeLayer(pickPreviewMarker);
     pickPreviewMarker = null;
@@ -1085,10 +1109,12 @@ async function submitSpot() {
     const name = (spotNameEl?.value || "").trim();
     const area = (spotAreaEl?.value || "").trim();
     const iftarType = (iftarTypeEl?.value || "mixed").trim();
+    const iftarDate = (iftarDateEl?.value || "").trim();
 
     if (!name) return flashBtn("⚠️ স্পটের নাম দিন");
     if (!area) return flashBtn("⚠️ এলাকা দিন");
     if (!iftarType) return flashBtn("⚠️ ইফতারের ধরন দিন");
+    if (!iftarDate) return flashBtn("তারিখ দিন");
     if (!pickedLatLng) return flashBtn("⚠️ লোকেশন দিন");
 
     const remainingCooldownMs = getRemainingCooldownMs();
@@ -1096,7 +1122,7 @@ async function submitSpot() {
       return flashBtn(`⚠️ ${Math.ceil(remainingCooldownMs / 1000)} সেকেন্ড পরে দিন`, 1500);
     }
 
-    const duplicateExists = spots.some((s) => {
+    const duplicateExists = allSpots.some((s) => {
       if (typeof s.lat !== "number" || typeof s.lng !== "number") return false;
       return (
         normalizeText(s.name) === normalizeText(name) &&
@@ -1126,6 +1152,7 @@ async function submitSpot() {
         name,
         area,
         iftarType,
+        iftarDate,
         lat: pickedLatLng.lat,
         lng: pickedLatLng.lng,
         createdBy: me.uid,
@@ -1142,6 +1169,7 @@ async function submitSpot() {
       name,
       area,
       iftarType,
+      iftarDate,
       lat: pickedLatLng.lat,
       lng: pickedLatLng.lng,
       createdBy: me.uid,
@@ -1151,7 +1179,9 @@ async function submitSpot() {
       myVote: null,
     };
 
-    spots.unshift(newSpot);
+    allSpots.unshift(newSpot);
+    const todayString = getLocalTodayString();
+    spots = allSpots.filter((spot) => isSpotForToday(spot, todayString));
     sortSpotsInPlace();
     spotsById = new Map(spots.map((spot) => [spot.id, spot]));
 
@@ -1162,6 +1192,7 @@ async function submitSpot() {
           name: newSpot.name,
           area: newSpot.area,
           iftarType: newSpot.iftarType,
+          iftarDate: newSpot.iftarDate,
           lat: newSpot.lat,
           lng: newSpot.lng,
           createdBy: newSpot.createdBy,
@@ -1180,6 +1211,7 @@ async function submitSpot() {
     spotNameEl.value = "";
     spotAreaEl.value = "";
     iftarTypeEl.value = "mixed";
+    if (iftarDateEl) iftarDateEl.value = getLocalTodayString();
 
     closeModal();
   } catch (e) {
@@ -1241,6 +1273,10 @@ async function toggleNearestSort() {
 }
 
 
+
+if (iftarDateEl && !iftarDateEl.value) {
+  iftarDateEl.value = getLocalTodayString();
+}
 
 const resolvedSubmitButton = resolveSubmitButton();
 resolvedSubmitButton?.addEventListener("click", submitSpot);
