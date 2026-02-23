@@ -733,29 +733,8 @@ body{
   }
 }
 
-.sheetSortBtn{
-  border: 1px solid rgba(255,255,255,0.22);
-  background: rgba(255,255,255,0.18);
-  color: #fff;
-  border-radius: 999px;
-  padding: 8px 12px;
-  font-weight: 900;
-  font-family: "Hind Siliguri", system-ui;
-  cursor: pointer;
-  transition: transform 120ms ease, opacity 120ms ease;
-  touch-action: manipulation;
-}
-.sheetSortBtn:active{ transform: scale(0.98); }
-.sheetSortBtn.active{ background: rgba(255,255,255,0.28); }
-.sheetSortBtn:disabled{ opacity: 0.7; cursor: not-allowed; }
-
-button, .card, .spotAct, .voteBtn, .pinBtn, .submitBtn, .addSpotBtn, .modalClose, .sheetHandle{
+button, .card, .spotAct, .voteBtn, .pinBtn, .submitBtn, .addSpotBtn, .modalClose, .sheetHandle, .sheetMeta{
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 
-.card{
-  transition: transform 160ms ease, opacity 160ms ease;
-  transform: translateZ(0);
-  opacity: 1;
-}

@@ -340,20 +340,20 @@ const iftarTypeEl = document.getElementById("iftarType");
 const pickLocationBtn = document.getElementById("pickLocationBtn");
 const pickedLatLngEl = document.getElementById("pickedLatLng");
 const submitSpotBtn = document.getElementById("submitSpotBtn");
-const sheetHeader = document.querySelector(".sheetHeader");
+const sheetMetaEl = document.querySelector(".sheetMeta");
 
 /* Near me sort */
 let sortMode = "newest";
 let userLocation = null;
-const nearMeBtn = document.createElement("button");
-nearMeBtn.className = "sheetSortBtn";
-nearMeBtn.type = "button";
-nearMeBtn.textContent = "নিকটতম";
-nearMeBtn.setAttribute("aria-label", "নিকটতম");
-sheetHeader?.appendChild(nearMeBtn);
 
-function updateNearMeButtonState() {
-  nearMeBtn.classList.toggle("active", sortMode === "nearest");
+if (sheetMetaEl) {
+  sheetMetaEl.setAttribute("role", "button");
+  sheetMetaEl.setAttribute("tabindex", "0");
+}
+
+function updateNearMeState() {
+  if (!sheetMetaEl) return;
+  sheetMetaEl.setAttribute("aria-pressed", sortMode === "nearest" ? "true" : "false");
 }
 
 /* Button state */
@@ -478,6 +478,12 @@ async function fetchFirestoreDataOnce() {
       writeDataCacheToCacheStorage(spotRows, voteRows);
 
       return { spots: spotRows, votes: voteRows };
+    })
+    .catch((error) => {
+      if (firestoreCache.spots && firestoreCache.votes) {
+        return { spots: firestoreCache.spots, votes: firestoreCache.votes };
+      }
+      throw error;
     })
     .finally(() => {
       firestoreCache.inFlight = null;
@@ -1028,11 +1034,10 @@ async function submitSpot() {
 async function activateNearestSort() {
   if (!navigator.geolocation) {
     sortMode = "newest";
-    updateNearMeButtonState();
+    updateNearMeState();
     return;
   }
 
-  nearMeBtn.disabled = true;
   try {
     const position = await new Promise((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -1050,30 +1055,42 @@ async function activateNearestSort() {
   } catch {
     sortMode = "newest";
   } finally {
-    nearMeBtn.disabled = false;
-    updateNearMeButtonState();
+    updateNearMeState();
     sortSpotsInPlace();
     spotsById = new Map(spots.map((spot) => [spot.id, spot]));
     renderList();
   }
 }
 
-nearMeBtn.addEventListener(
-  "click",
-  async () => {
-    if (sortMode === "nearest") {
-      sortMode = "newest";
-      updateNearMeButtonState();
-      sortSpotsInPlace();
-      spotsById = new Map(spots.map((spot) => [spot.id, spot]));
-      renderList();
-      return;
-    }
+async function toggleNearestSort() {
+  if (sortMode === "nearest") {
+    sortMode = "newest";
+    updateNearMeState();
+    sortSpotsInPlace();
+    spotsById = new Map(spots.map((spot) => [spot.id, spot]));
+    renderList();
+    return;
+  }
 
-    await activateNearestSort();
+  await activateNearestSort();
+}
+
+sheetMetaEl?.addEventListener(
+  "click",
+  () => {
+    requestAnimationFrame(() => {
+      toggleNearestSort();
+    });
   },
   { passive: true }
 );
+
+sheetMetaEl?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" || e.key === " ") {
+    e.preventDefault();
+    toggleNearestSort();
+  }
+});
 
 /* Boot */
 async function refreshAll() {

@@ -1,6 +1,7 @@
-const STATIC_CACHE = "free-ifter-static-v1";
-const RUNTIME_CACHE = "free-ifter-runtime-v1";
-const DATA_CACHE = "free-ifter-data-v1";
+const STATIC_CACHE = "free-ifter-static-v2";
+const RUNTIME_CACHE = "free-ifter-runtime-v2";
+const DATA_CACHE = "free-ifter-data-v2";
+const DATA_CACHE_TTL_MS = 3 * 60 * 1000;
 
 const CORE_ASSETS = [
   "/",
@@ -31,20 +32,53 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-async function staleWhileRevalidate(request, cacheName) {
+async function cacheFirst(request, cacheName) {
   const cache = await caches.open(cacheName);
   const cached = await cache.match(request);
+  if (cached) return cached;
 
-  const networkPromise = fetch(request)
-    .then((response) => {
-      if (response && response.ok) {
-        cache.put(request, response.clone());
+  const networkResponse = await fetch(request);
+  if (networkResponse && networkResponse.ok) {
+    cache.put(request, networkResponse.clone());
+  }
+  return networkResponse;
+}
+
+async function staleWhileRevalidateData(request) {
+  const cache = await caches.open(DATA_CACHE);
+  const cached = await cache.match(request);
+
+  if (cached) {
+    try {
+      const payload = await cached.clone().json();
+      const savedAt = Number(payload?.savedAt || 0);
+      if (Date.now() - savedAt <= DATA_CACHE_TTL_MS) {
+        fetch(request)
+          .then((res) => {
+            if (res && res.ok) cache.put(request, res.clone());
+          })
+          .catch(() => null);
+        return cached;
       }
-      return response;
-    })
-    .catch(() => null);
+    } catch {
+      // continue to network path
+    }
+  }
 
-  return cached || networkPromise;
+  try {
+    const networkResponse = await fetch(request);
+    if (networkResponse && networkResponse.ok) {
+      cache.put(request, networkResponse.clone());
+      return networkResponse;
+    }
+  } catch {
+    // fallback below
+  }
+
+  if (cached) return cached;
+  return new Response(JSON.stringify({ spots: [], votes: [], savedAt: 0 }), {
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 self.addEventListener("fetch", (event) => {
@@ -52,9 +86,15 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
 
   const url = new URL(request.url);
-  const isSameOrigin = url.origin === self.location.origin;
+  const sameOrigin = url.origin === self.location.origin;
+
+  if (url.pathname === "/__spots_cache__") {
+    event.respondWith(staleWhileRevalidateData(request));
+    return;
+  }
+
   const isStaticAsset =
-    isSameOrigin &&
+    sameOrigin &&
     (url.pathname === "/" ||
       url.pathname.endsWith(".html") ||
       url.pathname.endsWith(".css") ||
@@ -64,13 +104,8 @@ self.addEventListener("fetch", (event) => {
       url.pathname.endsWith(".json"));
 
   if (isStaticAsset) {
-    event.respondWith(staleWhileRevalidate(request, STATIC_CACHE));
-    return;
-  }
-
-  if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request).catch(async () => {
+      cacheFirst(request, STATIC_CACHE).catch(async () => {
         const cache = await caches.open(STATIC_CACHE);
         return cache.match("/index.html");
       })
@@ -78,12 +113,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  if (url.pathname === "/__spots_cache__") {
-    event.respondWith(staleWhileRevalidate(request, DATA_CACHE));
-    return;
-  }
-
   if (url.hostname.includes("openstreetmap.org") || url.hostname.includes("gstatic.com")) {
-    event.respondWith(staleWhileRevalidate(request, RUNTIME_CACHE));
+    event.respondWith(cacheFirst(request, RUNTIME_CACHE));
   }
 });
