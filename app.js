@@ -352,6 +352,14 @@ function typeEmoji(t) {
   return "🍽️";
 }
 
+function toMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
 async function loadSpotsAndVotes() {
   const { spots: cachedSpots, votes: cachedVotes } = await fetchFirestoreDataOnce();
 
@@ -386,6 +394,12 @@ async function loadSpotsAndVotes() {
     s.myVote = my;
     if (!s.iftarType) s.iftarType = "mixed";
   }
+
+  nextSpots.sort((a, b) => {
+    const diff = toMillis(b.createdAt) - toMillis(a.createdAt);
+    if (diff !== 0) return diff;
+    return String(b.id || "").localeCompare(String(a.id || ""));
+  });
 
   spots = nextSpots;
   spotsById = new Map(spots.map((spot) => [spot.id, spot]));
