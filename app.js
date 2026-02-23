@@ -37,6 +37,7 @@ const SESSION_CACHE_TTL_MS = 3 * 60 * 1000;
 const SUBMIT_COOLDOWN_MS = 60 * 1000;
 const SUBMIT_COOLDOWN_KEY = "free-ifter:last-submit-ts";
 const DATA_CACHE_PATH = "/__spots_cache__";
+const DATA_CACHE_TTL_MS = 3 * 60 * 1000;
 const SPOTS_FETCH_LIMIT = 250;
 const VOTES_FETCH_LIMIT = 500;
 
@@ -164,11 +165,13 @@ function writeSessionCache(spotsRows, voteRows) {
 }
 
 async function readDataCacheFromCacheStorage() {
-  if (!("caches" in window)) return null;
+  if (!("serviceWorker" in navigator)) return null;
   try {
-    const cache = await caches.open("free-ifter-data-v1");
-    const response = await cache.match(DATA_CACHE_PATH);
-    if (!response) return null;
+    const response = await fetch(DATA_CACHE_PATH, {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    if (!response?.ok) return null;
     const parsed = await response.json();
     if (!Array.isArray(parsed?.spots) || !Array.isArray(parsed?.votes)) return null;
     return parsed;
@@ -180,7 +183,7 @@ async function readDataCacheFromCacheStorage() {
 async function writeDataCacheToCacheStorage(spotsRows, voteRows) {
   if (!("caches" in window)) return;
   try {
-    const cache = await caches.open("free-ifter-data-v1");
+    const cache = await caches.open("free-ifter-data-v2");
     await cache.put(
       DATA_CACHE_PATH,
       new Response(
@@ -201,6 +204,10 @@ async function writeDataCacheToCacheStorage(spotsRows, voteRows) {
 
 function isSessionCacheFresh(savedAt) {
   return Date.now() - Number(savedAt || 0) <= SESSION_CACHE_TTL_MS;
+}
+
+function isDataCacheFresh(savedAt) {
+  return Date.now() - Number(savedAt || 0) <= DATA_CACHE_TTL_MS;
 }
 
 signInAnonymously(auth).catch((e) => console.error("Anonymous auth error:", e));
@@ -345,15 +352,41 @@ const sheetMetaEl = document.querySelector(".sheetMeta");
 /* Near me sort */
 let sortMode = "newest";
 let userLocation = null;
+let nearMeControlBtn = null;
 
-if (sheetMetaEl) {
-  sheetMetaEl.setAttribute("role", "button");
-  sheetMetaEl.setAttribute("tabindex", "0");
+function setupNearMeControl() {
+  if (!sheetMetaEl || nearMeControlBtn) return;
+
+  nearMeControlBtn = document.createElement("button");
+  nearMeControlBtn.type = "button";
+  nearMeControlBtn.className = "sheetMeta";
+  nearMeControlBtn.setAttribute("aria-pressed", "false");
+  nearMeControlBtn.textContent = "📍 Near me";
+
+  nearMeControlBtn.addEventListener(
+    "click",
+    () => {
+      requestAnimationFrame(() => {
+        toggleNearestSort();
+      });
+    },
+    { passive: true }
+  );
+
+  nearMeControlBtn.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggleNearestSort();
+    }
+  });
+
+  const header = sheetMetaEl.parentElement;
+  header?.appendChild(nearMeControlBtn);
 }
 
 function updateNearMeState() {
-  if (!sheetMetaEl) return;
-  sheetMetaEl.setAttribute("aria-pressed", sortMode === "nearest" ? "true" : "false");
+  if (!nearMeControlBtn) return;
+  nearMeControlBtn.setAttribute("aria-pressed", sortMode === "nearest" ? "true" : "false");
 }
 
 /* Button state */
@@ -445,7 +478,7 @@ async function fetchFirestoreDataOnce() {
     const swCached = await readDataCacheFromCacheStorage();
     if (swCached?.spots && swCached?.votes) {
       applyRowsToMemory(swCached.spots, swCached.votes);
-      if (isSessionCacheFresh(swCached.savedAt)) {
+      if (isDataCacheFresh(swCached.savedAt)) {
         writeSessionCache(swCached.spots, swCached.votes);
         return { spots: firestoreCache.spots, votes: firestoreCache.votes };
       }
@@ -1075,22 +1108,6 @@ async function toggleNearestSort() {
   await activateNearestSort();
 }
 
-sheetMetaEl?.addEventListener(
-  "click",
-  () => {
-    requestAnimationFrame(() => {
-      toggleNearestSort();
-    });
-  },
-  { passive: true }
-);
-
-sheetMetaEl?.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" || e.key === " ") {
-    e.preventDefault();
-    toggleNearestSort();
-  }
-});
 
 /* Boot */
 async function refreshAll() {
@@ -1115,6 +1132,7 @@ function waitForTilesLoaded(timeoutMs = 9000) {
 
 (async function boot() {
   try {
+    setupNearMeControl();
     await refreshAll();
 
     const sessionCached = readSessionCache();
