@@ -37,6 +37,7 @@ const SESSION_CACHE_TTL_MS = 3 * 60 * 1000;
 const SUBMIT_COOLDOWN_MS = 60 * 1000;
 const SUBMIT_COOLDOWN_KEY = "free-ifter:last-submit-ts";
 const DATA_CACHE_PATH = "/__spots_cache__";
+const DATA_CACHE_TTL_MS = 3 * 60 * 1000;
 const SPOTS_FETCH_LIMIT = 250;
 const VOTES_FETCH_LIMIT = 500;
 
@@ -164,11 +165,13 @@ function writeSessionCache(spotsRows, voteRows) {
 }
 
 async function readDataCacheFromCacheStorage() {
-  if (!("caches" in window)) return null;
+  if (!("serviceWorker" in navigator)) return null;
   try {
-    const cache = await caches.open("free-ifter-data-v1");
-    const response = await cache.match(DATA_CACHE_PATH);
-    if (!response) return null;
+    const response = await fetch(DATA_CACHE_PATH, {
+      cache: "no-store",
+      credentials: "same-origin",
+    });
+    if (!response?.ok) return null;
     const parsed = await response.json();
     if (!Array.isArray(parsed?.spots) || !Array.isArray(parsed?.votes)) return null;
     return parsed;
@@ -180,7 +183,7 @@ async function readDataCacheFromCacheStorage() {
 async function writeDataCacheToCacheStorage(spotsRows, voteRows) {
   if (!("caches" in window)) return;
   try {
-    const cache = await caches.open("free-ifter-data-v1");
+    const cache = await caches.open("free-ifter-data-v2");
     await cache.put(
       DATA_CACHE_PATH,
       new Response(
@@ -201,6 +204,10 @@ async function writeDataCacheToCacheStorage(spotsRows, voteRows) {
 
 function isSessionCacheFresh(savedAt) {
   return Date.now() - Number(savedAt || 0) <= SESSION_CACHE_TTL_MS;
+}
+
+function isDataCacheFresh(savedAt) {
+  return Date.now() - Number(savedAt || 0) <= DATA_CACHE_TTL_MS;
 }
 
 signInAnonymously(auth).catch((e) => console.error("Anonymous auth error:", e));
@@ -345,21 +352,47 @@ const sheetMetaEl = document.querySelector(".sheetMeta");
 /* Near me sort */
 let sortMode = "newest";
 let userLocation = null;
+let nearMeControlBtn = null;
 
-if (sheetMetaEl) {
-  sheetMetaEl.setAttribute("role", "button");
-  sheetMetaEl.setAttribute("tabindex", "0");
+function setupNearMeControl() {
+  if (!sheetMetaEl || nearMeControlBtn) return;
+
+  nearMeControlBtn = document.createElement("button");
+  nearMeControlBtn.type = "button";
+  nearMeControlBtn.className = "sheetMeta";
+  nearMeControlBtn.setAttribute("aria-pressed", "false");
+  nearMeControlBtn.textContent = "📍 Near me";
+
+  nearMeControlBtn.addEventListener(
+    "click",
+    () => {
+      requestAnimationFrame(() => {
+        toggleNearestSort();
+      });
+    },
+    { passive: true }
+  );
+
+  nearMeControlBtn.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggleNearestSort();
+    }
+  });
+
+  const header = sheetMetaEl.parentElement;
+  header?.appendChild(nearMeControlBtn);
 }
 
 function updateNearMeState() {
-  if (!sheetMetaEl) return;
-  sheetMetaEl.setAttribute("aria-pressed", sortMode === "nearest" ? "true" : "false");
+  if (!nearMeControlBtn) return;
+  nearMeControlBtn.setAttribute("aria-pressed", sortMode === "nearest" ? "true" : "false");
 }
 
 /* Button state */
 function syncSubmitBtnState() {
   if (!submitSpotBtn) return;
-  submitSpotBtn.textContent = "স্পট যোগ করুন";
+  submitSpotBtn.textContent = ORIGINAL_SUBMIT_LABEL;
   submitSpotBtn.disabled = false;
 }
 
@@ -383,14 +416,146 @@ function hidePickToast() {
   pickToastEl = null;
 }
 
+const ORIGINAL_SUBMIT_LABEL = "স্পট যোগ করুন";
+const VALIDATION_FEEDBACK_MS = 2500;
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 let submitting = false;
+let validationTimer = null;
+let validationMessageLocked = false;
+
+function resolveSubmitButton() {
+  if (submitSpotBtn) return submitSpotBtn;
+  const modalButtons = modal?.querySelectorAll("button") || [];
+  for (const btn of modalButtons) {
+    if ((btn.textContent || "").trim() === ORIGINAL_SUBMIT_LABEL) return btn;
+  }
+  return null;
+}
+
+function triggerButtonShake(btn) {
+  if (!btn || reduceMotion.matches) return;
+  btn.classList.remove("shake");
+  void btn.offsetWidth;
+  btn.classList.add("shake");
+}
+
+function clearValidationFeedbackTimer() {
+  if (!validationTimer) return;
+  clearTimeout(validationTimer);
+  validationTimer = null;
+}
+
+function restoreValidationButtonLabel() {
+  const btn = resolveSubmitButton();
+  if (!btn) return;
+  btn.textContent = ORIGINAL_SUBMIT_LABEL;
+  btn.classList.remove("shake");
+  validationMessageLocked = false;
+  clearValidationFeedbackTimer();
+}
+
+function showValidationFeedback(message) {
+  const btn = resolveSubmitButton();
+  if (!btn) return;
+
+  triggerButtonShake(btn);
+
+  if (validationMessageLocked) return;
+
+  validationMessageLocked = true;
+  btn.textContent = message;
+
+  clearValidationFeedbackTimer();
+  validationTimer = setTimeout(() => {
+    restoreValidationButtonLabel();
+  }, VALIDATION_FEEDBACK_MS);
+}
+
+function clearInvalidStyles() {
+  [spotNameEl, spotAreaEl, iftarTypeEl, pickLocationBtn].forEach((field) => {
+    field?.classList.remove("field-invalid");
+  });
+}
+
+function markInvalidField(field) {
+  if (!field) return;
+  field.classList.add("field-invalid");
+}
+
+function focusFieldWithoutJump(field) {
+  if (!field?.focus) return;
+  const x = window.scrollX;
+  const y = window.scrollY;
+  field.focus({ preventScroll: true });
+  window.scrollTo(x, y);
+}
+
+function getValidationIssue() {
+  const name = (spotNameEl?.value || "").trim();
+  const area = (spotAreaEl?.value || "").trim();
+  const iftarType = (iftarTypeEl?.value || "").trim();
+
+  if (!name) return { message: "নাম লিখুন", field: spotNameEl };
+  if (!area) return { message: "এলাকা লিখুন", field: spotAreaEl };
+  if (!iftarType) return { message: "ইফতারের ধরন দিন", field: iftarTypeEl };
+  if (!pickedLatLng) return { message: "ম্যাপে লোকেশন দিন", field: pickLocationBtn };
+
+  return null;
+}
+
+function handleInvalidSubmission() {
+  const issue = getValidationIssue() || { message: "সব ঘর পূরণ করুন", field: spotNameEl };
+  clearInvalidStyles();
+  markInvalidField(issue.field);
+  focusFieldWithoutJump(issue.field);
+  showValidationFeedback(issue.message);
+  submitting = false;
+  return false;
+}
+
+function interceptSubmitEvent(event) {
+  const btn = resolveSubmitButton();
+  const targetBtn = event?.target?.closest?.("button");
+  const fromSubmitButton = btn && (event.target === btn || targetBtn === btn);
+  const isFormSubmit = event?.type === "submit";
+
+  if (!fromSubmitButton && !isFormSubmit) return;
+
+  if (getValidationIssue()) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    handleInvalidSubmission();
+    return;
+  }
+
+  if (validationMessageLocked) restoreValidationButtonLabel();
+}
+
+[spotNameEl, spotAreaEl].forEach((el) => {
+  el?.addEventListener("input", () => el.classList.remove("field-invalid"), { passive: true });
+});
+
+iftarTypeEl?.addEventListener("change", () => iftarTypeEl.classList.remove("field-invalid"), {
+  passive: true,
+});
+
+pickLocationBtn?.addEventListener(
+  "click",
+  () => {
+    pickLocationBtn.classList.remove("field-invalid");
+  },
+  { passive: true }
+);
+
+modal?.addEventListener("click", interceptSubmitEvent, true);
+modal?.addEventListener("submit", interceptSubmitEvent, true);
+
 function flashBtn(msg, ms = 1200) {
   if (!submitSpotBtn) return;
 
   submitSpotBtn.disabled = false;
   submitSpotBtn.textContent = msg;
-  submitSpotBtn.classList.remove("shake");
-  requestAnimationFrame(() => submitSpotBtn.classList.add("shake"));
+  triggerButtonShake(submitSpotBtn);
 
   submitting = false;
 
@@ -445,7 +610,7 @@ async function fetchFirestoreDataOnce() {
     const swCached = await readDataCacheFromCacheStorage();
     if (swCached?.spots && swCached?.votes) {
       applyRowsToMemory(swCached.spots, swCached.votes);
-      if (isSessionCacheFresh(swCached.savedAt)) {
+      if (isDataCacheFresh(swCached.savedAt)) {
         writeSessionCache(swCached.spots, swCached.votes);
         return { spots: firestoreCache.spots, votes: firestoreCache.votes };
       }
@@ -821,6 +986,7 @@ let pickPreviewMarker = null;
 
 function setPicked(lat, lng) {
   pickedLatLng = { lat, lng };
+  pickLocationBtn?.classList.remove("field-invalid");
   pickedLatLngEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
@@ -904,8 +1070,6 @@ iftarTypeEl?.addEventListener(
 );
 
 /* Submit */
-submitSpotBtn.addEventListener("click", submitSpot);
-
 async function submitSpot() {
   if (submitting) return;
   submitting = true;
@@ -924,6 +1088,7 @@ async function submitSpot() {
 
     if (!name) return flashBtn("⚠️ স্পটের নাম দিন");
     if (!area) return flashBtn("⚠️ এলাকা দিন");
+    if (!iftarType) return flashBtn("⚠️ ইফতারের ধরন দিন");
     if (!pickedLatLng) return flashBtn("⚠️ লোকেশন দিন");
 
     const remainingCooldownMs = getRemainingCooldownMs();
@@ -1075,22 +1240,10 @@ async function toggleNearestSort() {
   await activateNearestSort();
 }
 
-sheetMetaEl?.addEventListener(
-  "click",
-  () => {
-    requestAnimationFrame(() => {
-      toggleNearestSort();
-    });
-  },
-  { passive: true }
-);
 
-sheetMetaEl?.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" || e.key === " ") {
-    e.preventDefault();
-    toggleNearestSort();
-  }
-});
+
+const resolvedSubmitButton = resolveSubmitButton();
+resolvedSubmitButton?.addEventListener("click", submitSpot);
 
 /* Boot */
 async function refreshAll() {
@@ -1115,6 +1268,7 @@ function waitForTilesLoaded(timeoutMs = 9000) {
 
 (async function boot() {
   try {
+    setupNearMeControl();
     await refreshAll();
 
     const sessionCached = readSessionCache();
