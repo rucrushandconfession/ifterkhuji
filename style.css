@@ -190,6 +190,8 @@ body{
 
   display:flex;
   flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
   will-change: height;
 }
 
@@ -207,6 +209,7 @@ body{
   justify-content:space-between;
   gap: 10px;
   padding: 0 14px 10px;
+  flex-shrink:0;
 }
 
 .sheetTitle{
@@ -258,6 +261,7 @@ body{
   display:flex;
   flex-direction:column;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .dateControlRow{
@@ -341,7 +345,7 @@ body{
 .filterRow{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
 .sortPills{ display:flex; gap:6px; }
 
-.listFooter{ padding: 0 12px 10px; display:flex; justify-content:center; }
+.listFooter{ padding: 0 12px 10px; display:flex; justify-content:center; flex-shrink:0; position:relative; z-index:1; }
 .loadMoreBtn.hidden{ display:none; }
 
 @media (prefers-reduced-motion: reduce){
@@ -363,10 +367,15 @@ body{
   border-radius: var(--radius-lg);
 
   padding: 10px;
-  overflow: auto;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 120px;
+  max-height: calc(86vh - 250px);
+  overflow-y: auto;
+  overflow-x: hidden;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+  position: relative;
+  z-index: 1;
 }
 
 .empty{
@@ -759,6 +768,7 @@ body{
   .countdownPill .time{ font-size: 15px; }
   .sheetControls{ gap: 7px; }
   .listDatePicker{ min-width: 112px; }
+  .list{ min-height: 110px; max-height: calc(86vh - 270px); }
   .filterRow{ flex-direction: column; align-items: stretch; }
   .sortPills{ justify-content: flex-end; }
   .voteBtn{ padding: 11px 12px; font-size: 13px; }
