@@ -52,19 +52,67 @@
     <div id="sheetHandle" class="sheetHandle"></div>
 
     <div class="sheetHeader">
-      <div class="sheetTitle">🍽️ আজকের স্পট</div>
+      <div class="sheetTitle">🍽️ ইফতারের লিস্ট</div>
+      <div class="sheetMeta"><span id="spotCount">0</span> টি</div>
+    </div>
 
-      <div id="dateChips" class="dateChips" role="tablist" aria-label="তারিখ বাছাই">
-        <button type="button" class="dateChip active" data-day-offset="0" aria-pressed="true">আজ</button>
-        <button type="button" class="dateChip" data-day-offset="1" aria-pressed="false">কাল</button>
-        <button type="button" class="dateChip" data-day-offset="2" aria-pressed="false">পরশু</button>
+    <div class="sheetControls" id="sheetControls">
+      <div class="dateControlRow">
+        <div id="dateChips" class="dateChips" role="tablist" aria-label="দ্রুত তারিখ বাছাই">
+          <button type="button" class="dateChip active" data-day-offset="0" aria-pressed="true">আজ</button>
+          <button type="button" class="dateChip" data-day-offset="1" aria-pressed="false">কাল</button>
+          <button type="button" class="dateChip" data-day-offset="2" aria-pressed="false">পরশু</button>
+        </div>
+        <input id="listDatePicker" class="listDatePicker" type="date" aria-label="তারিখ বাছাই" />
       </div>
 
-      <div class="sheetMeta"><span id="spotCount">0</span> টি</div>
+      <div id="dateStrip" class="dateStrip" aria-label="৭ দিনের তারিখ"></div>
+
+      <div id="availabilityIndicator" class="availabilityIndicator">এই তারিখে আছে: ✅ (0 টি)</div>
+
+      <div id="viewTabs" class="viewTabs" role="tablist" aria-label="লিস্ট ভিউ">
+        <button type="button" class="viewTab active" data-view="date" aria-selected="true">এই তারিখের স্পট</button>
+        <button type="button" class="viewTab" data-view="all" aria-selected="false">সব স্পট</button>
+      </div>
+
+      <div id="datePanel" class="viewPanel" data-view-panel="date">
+        <button type="button" class="panelToggle" data-panel="date" aria-expanded="true">
+          <span>এই তারিখের স্পট</span>
+          <span class="panelCaret">▾</span>
+        </button>
+      </div>
+
+      <div id="allPanel" class="viewPanel hidden" data-view-panel="all">
+        <button type="button" class="panelToggle" data-panel="all" aria-expanded="true">
+          <span>সব স্পট</span>
+          <span class="panelCaret">▾</span>
+        </button>
+
+        <div id="allFilters" class="allFilters">
+          <div class="filterPills" id="typeFilters">
+            <button type="button" class="filterPill active" data-type="all" aria-pressed="true">সব ধরন</button>
+            <button type="button" class="filterPill" data-type="mixed" aria-pressed="false">মিশ্র</button>
+            <button type="button" class="filterPill" data-type="biriyani" aria-pressed="false">বিরিয়ানি</button>
+            <button type="button" class="filterPill" data-type="chinese" aria-pressed="false">চাইনিজ</button>
+          </div>
+
+          <div class="filterRow">
+            <button type="button" id="verifiedOnlyToggle" class="filterPill" aria-pressed="false">✓ শুধু নিশ্চিত</button>
+            <div class="sortPills" id="sortControls">
+              <button type="button" class="filterPill active" data-sort="newest" aria-pressed="true">নতুন</button>
+              <button type="button" class="filterPill" data-sort="nearest" aria-pressed="false">কাছের</button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="list" class="list">
       <div class="empty">লোড হচ্ছে…</div>
+    </div>
+
+    <div class="listFooter">
+      <button id="loadMoreBtn" class="loadMoreBtn hidden" type="button">আরও দেখুন</button>
     </div>
   </section>
 

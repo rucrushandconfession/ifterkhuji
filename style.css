@@ -252,6 +252,102 @@ body{
   .dateChip{ transition: none; }
 }
 
+
+.sheetControls{
+  padding: 0 12px 8px;
+  display:flex;
+  flex-direction:column;
+  gap: 8px;
+}
+
+.dateControlRow{
+  display:flex;
+  align-items:center;
+  gap: 8px;
+}
+
+.dateChips{ display:flex; gap:6px; flex-wrap:wrap; }
+
+.dateChip,
+.filterPill,
+.viewTab,
+.panelToggle,
+.loadMoreBtn{
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.12);
+  color:#fff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-weight: 800;
+  font-size: 12px;
+  line-height: 1.1;
+  cursor: pointer;
+  transition: transform .18s ease, opacity .18s ease;
+}
+
+.dateChip.active,
+.dateChip[aria-pressed="true"],
+.filterPill.active,
+.filterPill[aria-pressed="true"],
+.viewTab.active,
+.viewTab[aria-selected="true"]{
+  background: rgba(255,255,255,0.24);
+  border-color: rgba(255,255,255,0.32);
+}
+
+.listDatePicker{
+  margin-left: auto;
+  min-width: 124px;
+  border: 1px solid rgba(255,255,255,0.22);
+  background: rgba(255,255,255,0.12);
+  color:#fff;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-weight: 800;
+  font-size: 12px;
+}
+
+.listDatePicker::-webkit-calendar-picker-indicator{ filter: invert(1); opacity:.9; }
+
+.dateStrip{ display:flex; gap:6px; overflow:auto; padding-bottom:2px; }
+.dateStripBtn{ white-space:nowrap; }
+.dateStripBtn small{ opacity:.85; margin-left:4px; font-size:10px; }
+
+.availabilityIndicator{
+  font-size: 12px;
+  font-weight: 800;
+  color: rgba(255,255,255,0.92);
+}
+
+.viewTabs{ display:flex; gap:6px; }
+.viewTab{ flex:1; }
+
+.viewPanel.hidden{ display:none; }
+.panelToggle{
+  width:100%;
+  border-radius: 12px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 7px 10px;
+}
+.panelToggle .panelCaret{ transition: transform .18s ease; }
+.viewPanel.collapsed .panelToggle .panelCaret{ transform: rotate(-90deg); }
+
+.allFilters{ display:flex; flex-direction:column; gap:7px; margin-top:8px; }
+.viewPanel.collapsed .allFilters{ display:none; }
+
+.filterPills{ display:flex; flex-wrap:wrap; gap:6px; }
+.filterRow{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.sortPills{ display:flex; gap:6px; }
+
+.listFooter{ padding: 0 12px 10px; display:flex; justify-content:center; }
+.loadMoreBtn.hidden{ display:none; }
+
+@media (prefers-reduced-motion: reduce){
+  .dateChip,.filterPill,.viewTab,.panelToggle,.panelToggle .panelCaret,.loadMoreBtn{ transition:none; }
+}
+
 .sheetMeta{
   background: rgba(255,255,255,0.18);
   border: 1px solid rgba(255,255,255,0.22);
@@ -661,6 +757,10 @@ body{
   .dateChips{ gap: 4px; }
   .dateChip{ padding: 5px 9px; font-size: 12px; }
   .countdownPill .time{ font-size: 15px; }
+  .sheetControls{ gap: 7px; }
+  .listDatePicker{ min-width: 112px; }
+  .filterRow{ flex-direction: column; align-items: stretch; }
+  .sortPills{ justify-content: flex-end; }
   .voteBtn{ padding: 11px 12px; font-size: 13px; }
   .spotCard{ width: 290px; }
   .addSpotBtn{ right: 12px; bottom: 114px; font-size: 13px; }

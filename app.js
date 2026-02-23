@@ -364,59 +364,303 @@ const pickedLatLngEl = document.getElementById("pickedLatLng");
 const submitSpotBtn = document.getElementById("submitSpotBtn");
 const sheetMetaEl = document.querySelector(".sheetMeta");
 const dateChipsEl = document.getElementById("dateChips");
+const listDatePickerEl = document.getElementById("listDatePicker");
+const dateStripEl = document.getElementById("dateStrip");
+const availabilityIndicatorEl = document.getElementById("availabilityIndicator");
+const viewTabsEl = document.getElementById("viewTabs");
+const datePanelEl = document.getElementById("datePanel");
+const allPanelEl = document.getElementById("allPanel");
+const typeFiltersEl = document.getElementById("typeFilters");
+const verifiedOnlyToggleEl = document.getElementById("verifiedOnlyToggle");
+const sortControlsEl = document.getElementById("sortControls");
+const loadMoreBtn = document.getElementById("loadMoreBtn");
 
-let selectedDayOffset = 0;
+const ALL_SPOTS_PAGE_SIZE = 30;
+let selectedDateString = getLocalTodayString();
+let activeView = "date";
+let allVisibleCount = ALL_SPOTS_PAGE_SIZE;
+let allTypeFilter = "all";
+let verifiedOnly = false;
+let lastFilteredTotal = 0;
+const collapsedPanels = { date: false, all: false };
 
-function isSpotVisibleForSelectedDate(spot, dayOffset = selectedDayOffset) {
-  const dateValue = spot?.iftarDate;
-  if (dayOffset === 0) {
-    const todayString = getLocalDateStringWithOffset(0);
-    return !dateValue || dateValue === todayString;
-  }
-
-  const targetString = getLocalDateStringWithOffset(dayOffset);
-  return dateValue === targetString;
+function isTodayString(dateString) {
+  return dateString === getLocalTodayString();
 }
 
-function applySelectedDateFilter() {
-  spots = allSpots.filter((spot) => isSpotVisibleForSelectedDate(spot, selectedDayOffset));
-  sortSpotsInPlace();
+function isSpotVisibleForDate(spot, dateString = selectedDateString) {
+  const dateValue = spot?.iftarDate;
+  if (isTodayString(dateString)) return !dateValue || dateValue === dateString;
+  return dateValue === dateString;
+}
+
+function isVerifiedSpot(spot) {
+  return getBadge(spot.truthCount, spot.fakeCount).cls === "good";
+}
+
+function updateAvailabilityIndicator() {
+  if (!availabilityIndicatorEl) return;
+  const count = allSpots.filter((spot) => isSpotVisibleForDate(spot, selectedDateString)).length;
+  const icon = count > 0 ? "✅" : "❌";
+  availabilityIndicatorEl.textContent = `এই তারিখে আছে: ${icon} (${count} টি)`;
+}
+
+function getWeekdayLabel(dateString) {
+  const d = new Date(`${dateString}T00:00:00`);
+  return ["রবি", "সোম", "মঙ্গল", "বুধ", "বৃহ", "শুক্র", "শনি"][d.getDay()] || "";
+}
+
+function buildDateStrip() {
+  if (!dateStripEl) return;
+  const frag = document.createDocumentFragment();
+  for (let i = 0; i < 7; i++) {
+    const dateValue = getLocalDateStringWithOffset(i);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "dateChip dateStripBtn";
+    btn.setAttribute("data-date", dateValue);
+    btn.innerHTML = `${dateValue.slice(8)} <small>${getWeekdayLabel(dateValue)}</small>`;
+    frag.appendChild(btn);
+  }
+  dateStripEl.replaceChildren(frag);
+}
+
+function syncDateControls() {
+  if (listDatePickerEl) listDatePickerEl.value = selectedDateString;
+
+  if (dateChipsEl) {
+    const chips = dateChipsEl.querySelectorAll(".dateChip");
+    const today = getLocalTodayString();
+    const tomorrow = getLocalDateStringWithOffset(1);
+    const dayAfterTomorrow = getLocalDateStringWithOffset(2);
+
+    for (const chip of chips) {
+      const offset = Number(chip.getAttribute("data-day-offset"));
+      const target = offset === 0 ? today : offset === 1 ? tomorrow : dayAfterTomorrow;
+      const active = selectedDateString === target;
+      chip.classList.toggle("active", active);
+      chip.setAttribute("aria-pressed", active ? "true" : "false");
+    }
+  }
+
+  if (dateStripEl) {
+    const stripBtns = dateStripEl.querySelectorAll(".dateStripBtn");
+    for (const btn of stripBtns) {
+      const active = btn.getAttribute("data-date") === selectedDateString;
+      btn.classList.toggle("active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    }
+  }
+}
+
+function syncViewTabsAndPanels() {
+  const tabs = viewTabsEl?.querySelectorAll(".viewTab") || [];
+  for (const tab of tabs) {
+    const view = tab.getAttribute("data-view");
+    const active = view === activeView;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
+  }
+
+  datePanelEl?.classList.toggle("hidden", activeView !== "date");
+  allPanelEl?.classList.toggle("hidden", activeView !== "all");
+
+  datePanelEl?.classList.toggle("collapsed", collapsedPanels.date);
+  allPanelEl?.classList.toggle("collapsed", collapsedPanels.all);
+
+  const dateToggle = datePanelEl?.querySelector(".panelToggle");
+  const allToggle = allPanelEl?.querySelector(".panelToggle");
+  dateToggle?.setAttribute("aria-expanded", collapsedPanels.date ? "false" : "true");
+  allToggle?.setAttribute("aria-expanded", collapsedPanels.all ? "false" : "true");
+}
+
+function getAllViewFilteredSpots() {
+  let filtered = allSpots;
+
+  if (allTypeFilter !== "all") {
+    filtered = filtered.filter((spot) => (spot.iftarType || "mixed") === allTypeFilter);
+  }
+
+  if (verifiedOnly) {
+    filtered = filtered.filter((spot) => isVerifiedSpot(spot));
+  }
+
+  return filtered;
+}
+
+function applyCurrentViewFilter({ resetAllPagination = false } = {}) {
+  if (activeView === "date") {
+    spots = allSpots.filter((spot) => isSpotVisibleForDate(spot, selectedDateString));
+    sortSpotsInPlace();
+    lastFilteredTotal = spots.length;
+    loadMoreBtn?.classList.add("hidden");
+  } else {
+    const filtered = getAllViewFilteredSpots();
+
+    const sorted = [...filtered];
+    spots = sorted;
+    sortSpotsInPlace();
+
+    if (resetAllPagination) allVisibleCount = ALL_SPOTS_PAGE_SIZE;
+    const visible = Math.min(allVisibleCount, spots.length);
+    spots = spots.slice(0, visible);
+
+    lastFilteredTotal = filtered.length;
+    if (loadMoreBtn) {
+      const shouldShow = !collapsedPanels.all && activeView === "all" && visible < filtered.length;
+      loadMoreBtn.classList.toggle("hidden", !shouldShow);
+    }
+  }
+
   spotsById = new Map(spots.map((spot) => [spot.id, spot]));
 }
 
-function syncDateChipState() {
-  if (!dateChipsEl) return;
-  const chips = dateChipsEl.querySelectorAll(".dateChip");
-  for (const chip of chips) {
-    const offset = Number(chip.getAttribute("data-day-offset") || 0);
-    const active = offset === selectedDayOffset;
-    chip.classList.toggle("active", active);
-    chip.setAttribute("aria-pressed", active ? "true" : "false");
-  }
+function setSelectedDate(nextDateString) {
+  if (!nextDateString || nextDateString === selectedDateString) return;
+  selectedDateString = nextDateString;
+  syncDateControls();
+  updateAvailabilityIndicator();
+  applyCurrentViewFilter({ resetAllPagination: activeView === "all" });
+  renderMarkers();
+  renderList();
 }
 
-function setupDateChipControl() {
-  if (!dateChipsEl) return;
+function setupListingControls() {
+  buildDateStrip();
+  syncDateControls();
+  syncViewTabsAndPanels();
 
-  dateChipsEl.addEventListener(
+  dateChipsEl?.addEventListener(
     "click",
     (e) => {
       const chip = e.target.closest(".dateChip");
       if (!chip) return;
+      const offset = Number(chip.getAttribute("data-day-offset"));
+      if (!Number.isFinite(offset)) return;
+      setSelectedDate(getLocalDateStringWithOffset(offset));
+    },
+    { passive: true }
+  );
 
-      const nextOffset = Number(chip.getAttribute("data-day-offset"));
-      if (!Number.isFinite(nextOffset) || nextOffset === selectedDayOffset) return;
+  dateStripEl?.addEventListener(
+    "click",
+    (e) => {
+      const btn = e.target.closest(".dateStripBtn");
+      if (!btn) return;
+      setSelectedDate(btn.getAttribute("data-date"));
+    },
+    { passive: true }
+  );
 
-      selectedDayOffset = nextOffset;
-      syncDateChipState();
-      applySelectedDateFilter();
+  listDatePickerEl?.addEventListener(
+    "change",
+    () => {
+      setSelectedDate((listDatePickerEl.value || "").trim());
+    },
+    { passive: true }
+  );
+
+  viewTabsEl?.addEventListener(
+    "click",
+    (e) => {
+      const tab = e.target.closest(".viewTab");
+      if (!tab) return;
+      const nextView = tab.getAttribute("data-view");
+      if (!nextView || nextView === activeView) return;
+      activeView = nextView;
+      syncViewTabsAndPanels();
+      applyCurrentViewFilter({ resetAllPagination: true });
       renderMarkers();
       renderList();
     },
     { passive: true }
   );
 
-  syncDateChipState();
+  [datePanelEl, allPanelEl].forEach((panelEl) => {
+    panelEl
+      ?.querySelector(".panelToggle")
+      ?.addEventListener(
+        "click",
+        () => {
+          const panel = panelEl.getAttribute("data-view-panel");
+          collapsedPanels[panel] = !collapsedPanels[panel];
+          syncViewTabsAndPanels();
+          applyCurrentViewFilter();
+          renderMarkers();
+          renderList();
+        },
+        { passive: true }
+      );
+  });
+
+  typeFiltersEl?.addEventListener(
+    "click",
+    (e) => {
+      const btn = e.target.closest(".filterPill");
+      if (!btn) return;
+      const t = btn.getAttribute("data-type");
+      if (!t || t === allTypeFilter) return;
+      allTypeFilter = t;
+
+      const all = typeFiltersEl.querySelectorAll(".filterPill");
+      for (const item of all) {
+        const active = item.getAttribute("data-type") === allTypeFilter;
+        item.classList.toggle("active", active);
+        item.setAttribute("aria-pressed", active ? "true" : "false");
+      }
+
+      applyCurrentViewFilter({ resetAllPagination: true });
+      renderMarkers();
+      renderList();
+    },
+    { passive: true }
+  );
+
+  verifiedOnlyToggleEl?.addEventListener(
+    "click",
+    () => {
+      verifiedOnly = !verifiedOnly;
+      verifiedOnlyToggleEl.classList.toggle("active", verifiedOnly);
+      verifiedOnlyToggleEl.setAttribute("aria-pressed", verifiedOnly ? "true" : "false");
+      applyCurrentViewFilter({ resetAllPagination: true });
+      renderMarkers();
+      renderList();
+    },
+    { passive: true }
+  );
+
+  sortControlsEl?.addEventListener(
+    "click",
+    async (e) => {
+      const btn = e.target.closest(".filterPill");
+      if (!btn) return;
+      const requestedSort = btn.getAttribute("data-sort");
+      if (!requestedSort || requestedSort === sortMode) return;
+
+      if (requestedSort === "nearest") {
+        await activateNearestSort();
+      } else {
+        sortMode = "newest";
+      }
+
+      updateNearMeState();
+      applyCurrentViewFilter();
+      renderMarkers();
+      renderList();
+    },
+    { passive: true }
+  );
+
+  loadMoreBtn?.addEventListener(
+    "click",
+    () => {
+      allVisibleCount += ALL_SPOTS_PAGE_SIZE;
+      applyCurrentViewFilter();
+      renderMarkers();
+      renderList();
+    },
+    { passive: true }
+  );
 }
 
 /* Near me sort */
@@ -455,8 +699,16 @@ function setupNearMeControl() {
 }
 
 function updateNearMeState() {
-  if (!nearMeControlBtn) return;
-  nearMeControlBtn.setAttribute("aria-pressed", sortMode === "nearest" ? "true" : "false");
+  if (nearMeControlBtn) {
+    nearMeControlBtn.setAttribute("aria-pressed", sortMode === "nearest" ? "true" : "false");
+  }
+
+  const sortBtns = sortControlsEl?.querySelectorAll(".filterPill") || [];
+  for (const item of sortBtns) {
+    const active = item.getAttribute("data-sort") === sortMode;
+    item.classList.toggle("active", active);
+    item.setAttribute("aria-pressed", active ? "true" : "false");
+  }
 }
 
 /* Button state */
@@ -823,7 +1075,7 @@ async function loadSpotsAndVotes() {
   }
 
   allSpots = nextSpots;
-  applySelectedDateFilter();
+  applyCurrentViewFilter({ resetAllPagination: true });
 }
 
 /* Pins */
@@ -972,7 +1224,13 @@ function createListCard(s) {
 }
 
 function renderList() {
-  countEl.textContent = String(spots.length);
+  countEl.textContent = String(lastFilteredTotal);
+
+  if ((activeView === "date" && collapsedPanels.date) || (activeView === "all" && collapsedPanels.all)) {
+    listEl.innerHTML = `<div class="empty">লিস্ট বন্ধ আছে</div>`;
+    loadMoreBtn?.classList.add("hidden");
+    return;
+  }
 
   if (!spots.length) {
     listEl.innerHTML = `<div class="empty">কোনো স্পট নেই</div>`;
@@ -1234,7 +1492,7 @@ async function submitSpot() {
     };
 
     allSpots.unshift(newSpot);
-    applySelectedDateFilter();
+    applyCurrentViewFilter({ resetAllPagination: true });
 
     if (Array.isArray(firestoreCache.spots)) {
       firestoreCache.spots = [
@@ -1304,8 +1562,8 @@ async function activateNearestSort() {
     sortMode = "newest";
   } finally {
     updateNearMeState();
-    sortSpotsInPlace();
-    spotsById = new Map(spots.map((spot) => [spot.id, spot]));
+    applyCurrentViewFilter();
+    renderMarkers();
     renderList();
   }
 }
@@ -1314,8 +1572,8 @@ async function toggleNearestSort() {
   if (sortMode === "nearest") {
     sortMode = "newest";
     updateNearMeState();
-    sortSpotsInPlace();
-    spotsById = new Map(spots.map((spot) => [spot.id, spot]));
+    applyCurrentViewFilter();
+    renderMarkers();
     renderList();
     return;
   }
@@ -1335,6 +1593,9 @@ resolvedSubmitButton?.addEventListener("click", submitSpot);
 /* Boot */
 async function refreshAll() {
   await loadSpotsAndVotes();
+  syncDateControls();
+  updateAvailabilityIndicator();
+  syncViewTabsAndPanels();
   renderMarkers();
   renderList();
 }
@@ -1356,7 +1617,8 @@ function waitForTilesLoaded(timeoutMs = 9000) {
 (async function boot() {
   try {
     setupNearMeControl();
-    setupDateChipControl();
+    setupListingControls();
+    updateNearMeState();
     await refreshAll();
 
     const sessionCached = readSessionCache();
