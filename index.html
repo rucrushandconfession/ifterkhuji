@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#275130" />
   <title>Free Iftar</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15,6 +16,7 @@
   <link rel="dns-prefetch" href="//identitytoolkit.googleapis.com">
 
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <link rel="manifest" href="./manifest.json" />
   <link rel="stylesheet" href="./style.css" />
 </head>
 
@@ -107,5 +109,12 @@
 
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script type="module" src="./app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js").catch(() => {});
+      }, { passive: true });
+    }
+  </script>
 </body>
 </html>

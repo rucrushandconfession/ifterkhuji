@@ -7,6 +7,9 @@ import {
   setDoc,
   addDoc,
   serverTimestamp,
+  query,
+  orderBy,
+  limit,
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import {
   getAuth,
@@ -29,8 +32,17 @@ const fbApp = initializeApp(firebaseConfig);
 const db = getFirestore(fbApp);
 const auth = getAuth(fbApp);
 
+const SESSION_CACHE_KEY = "free-ifter:spots-votes:v2";
+const SESSION_CACHE_TTL_MS = 3 * 60 * 1000;
+const SUBMIT_COOLDOWN_MS = 60 * 1000;
+const SUBMIT_COOLDOWN_KEY = "free-ifter:last-submit-ts";
+const DATA_CACHE_PATH = "/__spots_cache__";
+const SPOTS_FETCH_LIMIT = 250;
+const VOTES_FETCH_LIMIT = 500;
+
 let me = null;
 let authReady = false;
+let fetchedRemoteThisPageLoad = false;
 
 /* Loading overlay */
 const loadingOverlay = document.getElementById("loadingOverlay");
@@ -82,6 +94,113 @@ let nextRaf = 0;
 function rafOnce(fn) {
   cancelAnimationFrame(nextRaf);
   nextRaf = requestAnimationFrame(fn);
+}
+
+function toMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
+
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function roundCoord(value) {
+  return Number(value).toFixed(5);
+}
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const toRad = (n) => (n * Math.PI) / 180;
+  const R = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function getRemainingCooldownMs() {
+  const lastSubmit = Number(localStorage.getItem(SUBMIT_COOLDOWN_KEY) || 0);
+  const remaining = SUBMIT_COOLDOWN_MS - (Date.now() - lastSubmit);
+  return Math.max(0, remaining);
+}
+
+function setSubmitCooldownNow() {
+  localStorage.setItem(SUBMIT_COOLDOWN_KEY, String(Date.now()));
+}
+
+function readSessionCache() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.savedAt || !Array.isArray(parsed?.spots) || !Array.isArray(parsed?.votes)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeSessionCache(spotsRows, voteRows) {
+  try {
+    sessionStorage.setItem(
+      SESSION_CACHE_KEY,
+      JSON.stringify({
+        savedAt: Date.now(),
+        spots: spotsRows,
+        votes: voteRows,
+      })
+    );
+  } catch {
+    // ignore quota/storage errors
+  }
+}
+
+async function readDataCacheFromCacheStorage() {
+  if (!("caches" in window)) return null;
+  try {
+    const cache = await caches.open("free-ifter-data-v1");
+    const response = await cache.match(DATA_CACHE_PATH);
+    if (!response) return null;
+    const parsed = await response.json();
+    if (!Array.isArray(parsed?.spots) || !Array.isArray(parsed?.votes)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+async function writeDataCacheToCacheStorage(spotsRows, voteRows) {
+  if (!("caches" in window)) return;
+  try {
+    const cache = await caches.open("free-ifter-data-v1");
+    await cache.put(
+      DATA_CACHE_PATH,
+      new Response(
+        JSON.stringify({
+          savedAt: Date.now(),
+          spots: spotsRows,
+          votes: voteRows,
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+        }
+      )
+    );
+  } catch {
+    // ignore cache failures
+  }
+}
+
+function isSessionCacheFresh(savedAt) {
+  return Date.now() - Number(savedAt || 0) <= SESSION_CACHE_TTL_MS;
 }
 
 signInAnonymously(auth).catch((e) => console.error("Anonymous auth error:", e));
@@ -174,8 +293,8 @@ function onStart(e) {
   sheet.style.transition = "none";
   startY = e.touches ? e.touches[0].clientY : e.clientY;
   startH = currentH;
-  document.addEventListener("mousemove", onMove);
-  document.addEventListener("mouseup", onEnd);
+  document.addEventListener("mousemove", onMove, { passive: true });
+  document.addEventListener("mouseup", onEnd, { passive: true });
   document.addEventListener("touchmove", onMove, { passive: false });
   document.addEventListener("touchend", onEnd, { passive: true });
 }
@@ -206,7 +325,7 @@ function onEnd() {
   document.removeEventListener("touchmove", onMove);
   document.removeEventListener("touchend", onEnd);
 }
-handle.addEventListener("mousedown", onStart);
+handle.addEventListener("mousedown", onStart, { passive: true });
 handle.addEventListener("touchstart", onStart, { passive: true });
 
 /* UI refs */
@@ -221,6 +340,21 @@ const iftarTypeEl = document.getElementById("iftarType");
 const pickLocationBtn = document.getElementById("pickLocationBtn");
 const pickedLatLngEl = document.getElementById("pickedLatLng");
 const submitSpotBtn = document.getElementById("submitSpotBtn");
+const sheetHeader = document.querySelector(".sheetHeader");
+
+/* Near me sort */
+let sortMode = "newest";
+let userLocation = null;
+const nearMeBtn = document.createElement("button");
+nearMeBtn.className = "sheetSortBtn";
+nearMeBtn.type = "button";
+nearMeBtn.textContent = "নিকটতম";
+nearMeBtn.setAttribute("aria-label", "নিকটতম");
+sheetHeader?.appendChild(nearMeBtn);
+
+function updateNearMeButtonState() {
+  nearMeBtn.classList.toggle("active", sortMode === "nearest");
+}
 
 /* Button state */
 function syncSubmitBtnState() {
@@ -235,7 +369,7 @@ onAuthStateChanged(auth, (u) => {
   syncSubmitBtnState();
 });
 
-/* ✅ Pick toast + shake message helpers */
+/* Pick toast + shake message helpers */
 let pickToastEl = null;
 function showPickToast() {
   if (pickToastEl) return;
@@ -255,10 +389,8 @@ function flashBtn(msg, ms = 1200) {
 
   submitSpotBtn.disabled = false;
   submitSpotBtn.textContent = msg;
-
   submitSpotBtn.classList.remove("shake");
-  submitSpotBtn.offsetWidth;
-  submitSpotBtn.classList.add("shake");
+  requestAnimationFrame(() => submitSpotBtn.classList.add("shake"));
 
   submitting = false;
 
@@ -288,6 +420,12 @@ function clearFirestoreCache() {
   firestoreCache.inFlight = null;
 }
 
+function applyRowsToMemory(spotsRows, voteRows) {
+  firestoreCache.spots = spotsRows;
+  firestoreCache.votes = voteRows;
+  firestoreCache.loaded = true;
+}
+
 async function fetchFirestoreDataOnce() {
   if (firestoreCache.loaded && firestoreCache.spots && firestoreCache.votes) {
     return { spots: firestoreCache.spots, votes: firestoreCache.votes };
@@ -295,9 +433,32 @@ async function fetchFirestoreDataOnce() {
 
   if (firestoreCache.inFlight) return firestoreCache.inFlight;
 
+  const sessionCached = readSessionCache();
+  if (sessionCached?.spots && sessionCached?.votes) {
+    applyRowsToMemory(sessionCached.spots, sessionCached.votes);
+    if (isSessionCacheFresh(sessionCached.savedAt)) {
+      return { spots: firestoreCache.spots, votes: firestoreCache.votes };
+    }
+  }
+
+  if (!sessionCached) {
+    const swCached = await readDataCacheFromCacheStorage();
+    if (swCached?.spots && swCached?.votes) {
+      applyRowsToMemory(swCached.spots, swCached.votes);
+      if (isSessionCacheFresh(swCached.savedAt)) {
+        writeSessionCache(swCached.spots, swCached.votes);
+        return { spots: firestoreCache.spots, votes: firestoreCache.votes };
+      }
+    }
+  }
+
+  if (fetchedRemoteThisPageLoad) {
+    return { spots: firestoreCache.spots || [], votes: firestoreCache.votes || [] };
+  }
+
   firestoreCache.inFlight = Promise.all([
-    getDocs(collection(db, "spots")),
-    getDocs(collection(db, "votes")),
+    getDocs(query(collection(db, "spots"), orderBy("createdAt", "desc"), limit(SPOTS_FETCH_LIMIT))),
+    getDocs(query(collection(db, "votes"), orderBy("createdAt", "desc"), limit(VOTES_FETCH_LIMIT))),
   ])
     .then(([spotSnap, voteSnap]) => {
       const spotRows = [];
@@ -311,9 +472,10 @@ async function fetchFirestoreDataOnce() {
         voteRows.push(d.data() || {});
       });
 
-      firestoreCache.spots = spotRows;
-      firestoreCache.votes = voteRows;
-      firestoreCache.loaded = true;
+      applyRowsToMemory(spotRows, voteRows);
+      fetchedRemoteThisPageLoad = true;
+      writeSessionCache(spotRows, voteRows);
+      writeDataCacheToCacheStorage(spotRows, voteRows);
 
       return { spots: spotRows, votes: voteRows };
     })
@@ -352,12 +514,29 @@ function typeEmoji(t) {
   return "🍽️";
 }
 
-function toMillis(value) {
-  if (!value) return 0;
-  if (typeof value.toMillis === "function") return value.toMillis();
-  if (value instanceof Date) return value.getTime();
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+function sortSpotsInPlace() {
+  if (sortMode === "nearest" && userLocation) {
+    for (const s of spots) {
+      if (typeof s.lat !== "number" || typeof s.lng !== "number") {
+        s.distanceKm = Number.POSITIVE_INFINITY;
+        continue;
+      }
+      s.distanceKm = haversineKm(userLocation.lat, userLocation.lng, s.lat, s.lng);
+    }
+
+    spots.sort((a, b) => {
+      const diff = (a.distanceKm || Number.POSITIVE_INFINITY) - (b.distanceKm || Number.POSITIVE_INFINITY);
+      if (diff !== 0) return diff;
+      return toMillis(b.createdAt) - toMillis(a.createdAt);
+    });
+    return;
+  }
+
+  spots.sort((a, b) => {
+    const diff = toMillis(b.createdAt) - toMillis(a.createdAt);
+    if (diff !== 0) return diff;
+    return String(b.id || "").localeCompare(String(a.id || ""));
+  });
 }
 
 async function loadSpotsAndVotes() {
@@ -395,13 +574,8 @@ async function loadSpotsAndVotes() {
     if (!s.iftarType) s.iftarType = "mixed";
   }
 
-  nextSpots.sort((a, b) => {
-    const diff = toMillis(b.createdAt) - toMillis(a.createdAt);
-    if (diff !== 0) return diff;
-    return String(b.id || "").localeCompare(String(a.id || ""));
-  });
-
   spots = nextSpots;
+  sortSpotsInPlace();
   spotsById = new Map(spots.map((spot) => [spot.id, spot]));
 }
 
@@ -564,25 +738,29 @@ function renderList() {
   listEl.replaceChildren(frag);
 }
 
-listEl.addEventListener("click", async (e) => {
-  const voteBtn = e.target.closest(".voteBtn");
-  if (voteBtn) {
-    e.stopPropagation();
-    const spotId = voteBtn.getAttribute("data-id");
-    const value = voteBtn.getAttribute("data-v");
-    await castVote(spotId, value);
-    return;
-  }
+listEl.addEventListener(
+  "click",
+  async (e) => {
+    const voteBtn = e.target.closest(".voteBtn");
+    if (voteBtn) {
+      e.stopPropagation();
+      const spotId = voteBtn.getAttribute("data-id");
+      const value = voteBtn.getAttribute("data-v");
+      await castVote(spotId, value);
+      return;
+    }
 
-  const card = e.target.closest(".card");
-  if (!card) return;
+    const card = e.target.closest(".card");
+    if (!card) return;
 
-  const id = card.getAttribute("data-spot");
-  const s = spotsById.get(id);
-  if (!s) return;
-  map.setView([s.lat, s.lng], Math.max(map.getZoom(), 14), { animate: true });
-  openSpotPopup([s.lat, s.lng], s);
-});
+    const id = card.getAttribute("data-spot");
+    const s = spotsById.get(id);
+    if (!s) return;
+    map.setView([s.lat, s.lng], Math.max(map.getZoom(), 14), { animate: true });
+    openSpotPopup([s.lat, s.lng], s);
+  },
+  { passive: true }
+);
 
 /* Voting */
 async function castVote(spotId, value) {
@@ -620,6 +798,8 @@ async function castVote(spotId, value) {
       );
       firestoreCache.votes = [...withoutMine, { spotId, uid: me.uid, value }];
       firestoreCache.loaded = true;
+      writeSessionCache(firestoreCache.spots || [], firestoreCache.votes);
+      writeDataCacheToCacheStorage(firestoreCache.spots || [], firestoreCache.votes);
     }
   } catch (e) {
     console.error("Vote write failed:", e);
@@ -661,18 +841,22 @@ function closeModal() {
   }
 }
 
-addSpotBtn.addEventListener("click", openModal);
-closeModalBtn.addEventListener("click", closeModal);
+addSpotBtn.addEventListener("click", openModal, { passive: true });
+closeModalBtn.addEventListener("click", closeModal, { passive: true });
 
-pickLocationBtn.addEventListener("click", () => {
-  pickMode = true;
+pickLocationBtn.addEventListener(
+  "click",
+  () => {
+    pickMode = true;
 
-  modal.classList.add("picking");
-  modal.classList.remove("pickMode");
+    modal.classList.add("picking");
+    modal.classList.remove("pickMode");
 
-  pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
-  showPickToast();
-});
+    pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
+    showPickToast();
+  },
+  { passive: true }
+);
 
 map.on("click", (e) => {
   const { lat, lng } = e.latlng;
@@ -699,17 +883,21 @@ map.on("click", (e) => {
   setPicked(lat, lng);
 });
 
-iftarTypeEl?.addEventListener("change", () => {
-  if (!pickedLatLng) return;
-  const { lat, lng } = pickedLatLng;
-  if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
-  pickPreviewMarker = L.marker([lat, lng], {
-    icon: makeFoodPinIcon(v(iftarTypeEl) || "mixed"),
-  });
-  markerLayer.addLayer(pickPreviewMarker);
-});
+iftarTypeEl?.addEventListener(
+  "change",
+  () => {
+    if (!pickedLatLng) return;
+    const { lat, lng } = pickedLatLng;
+    if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
+    pickPreviewMarker = L.marker([lat, lng], {
+      icon: makeFoodPinIcon(v(iftarTypeEl) || "mixed"),
+    });
+    markerLayer.addLayer(pickPreviewMarker);
+  },
+  { passive: true }
+);
 
-/* ✅ Submit */
+/* Submit */
 submitSpotBtn.addEventListener("click", submitSpot);
 
 async function submitSpot() {
@@ -731,6 +919,25 @@ async function submitSpot() {
     if (!name) return flashBtn("⚠️ স্পটের নাম দিন");
     if (!area) return flashBtn("⚠️ এলাকা দিন");
     if (!pickedLatLng) return flashBtn("⚠️ লোকেশন দিন");
+
+    const remainingCooldownMs = getRemainingCooldownMs();
+    if (remainingCooldownMs > 0) {
+      return flashBtn(`⚠️ ${Math.ceil(remainingCooldownMs / 1000)} সেকেন্ড পরে দিন`, 1500);
+    }
+
+    const duplicateExists = spots.some((s) => {
+      if (typeof s.lat !== "number" || typeof s.lng !== "number") return false;
+      return (
+        normalizeText(s.name) === normalizeText(name) &&
+        normalizeText(s.area) === normalizeText(area) &&
+        roundCoord(s.lat) === roundCoord(pickedLatLng.lat) &&
+        roundCoord(s.lng) === roundCoord(pickedLatLng.lng)
+      );
+    });
+
+    if (duplicateExists) {
+      return flashBtn("⚠️ একই স্পট আগেই আছে", 1600);
+    }
 
     const u = await ensureAuthReady();
     me = u;
@@ -757,6 +964,8 @@ async function submitSpot() {
       "Firestore timeout"
     );
 
+    setSubmitCooldownNow();
+
     const newSpot = {
       id: docRef.id,
       name,
@@ -772,7 +981,8 @@ async function submitSpot() {
     };
 
     spots.unshift(newSpot);
-    spotsById.set(newSpot.id, newSpot);
+    sortSpotsInPlace();
+    spotsById = new Map(spots.map((spot) => [spot.id, spot]));
 
     if (Array.isArray(firestoreCache.spots)) {
       firestoreCache.spots = [
@@ -789,6 +999,8 @@ async function submitSpot() {
         ...firestoreCache.spots,
       ];
       firestoreCache.loaded = true;
+      writeSessionCache(firestoreCache.spots, firestoreCache.votes || []);
+      writeDataCacheToCacheStorage(firestoreCache.spots, firestoreCache.votes || []);
     }
 
     renderMarkers();
@@ -796,7 +1008,7 @@ async function submitSpot() {
 
     spotNameEl.value = "";
     spotAreaEl.value = "";
-    iftarTypeEl.value = "";
+    iftarTypeEl.value = "mixed";
 
     closeModal();
   } catch (e) {
@@ -812,6 +1024,56 @@ async function submitSpot() {
     syncSubmitBtnState();
   }
 }
+
+async function activateNearestSort() {
+  if (!navigator.geolocation) {
+    sortMode = "newest";
+    updateNearMeButtonState();
+    return;
+  }
+
+  nearMeBtn.disabled = true;
+  try {
+    const position = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: false,
+        timeout: 10000,
+        maximumAge: 300000,
+      });
+    });
+
+    userLocation = {
+      lat: position.coords.latitude,
+      lng: position.coords.longitude,
+    };
+    sortMode = "nearest";
+  } catch {
+    sortMode = "newest";
+  } finally {
+    nearMeBtn.disabled = false;
+    updateNearMeButtonState();
+    sortSpotsInPlace();
+    spotsById = new Map(spots.map((spot) => [spot.id, spot]));
+    renderList();
+  }
+}
+
+nearMeBtn.addEventListener(
+  "click",
+  async () => {
+    if (sortMode === "nearest") {
+      sortMode = "newest";
+      updateNearMeButtonState();
+      sortSpotsInPlace();
+      spotsById = new Map(spots.map((spot) => [spot.id, spot]));
+      renderList();
+      return;
+    }
+
+    await activateNearestSort();
+  },
+  { passive: true }
+);
 
 /* Boot */
 async function refreshAll() {
@@ -837,6 +1099,14 @@ function waitForTilesLoaded(timeoutMs = 9000) {
 (async function boot() {
   try {
     await refreshAll();
+
+    const sessionCached = readSessionCache();
+    const shouldRevalidate = !sessionCached || !isSessionCacheFresh(sessionCached.savedAt);
+    if (shouldRevalidate && !fetchedRemoteThisPageLoad) {
+      clearFirestoreCache();
+      await refreshAll();
+    }
+
     await waitForTilesLoaded();
     setTimeout(hideLoading, 250);
   } catch (e) {
