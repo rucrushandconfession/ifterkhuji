@@ -1,11 +1,11 @@
 // =============================
-// app.js (FULL REPLACE - Your requested changes)
+// app.js (FULL REPLACE)
 // ✅ Loading overlay on entry
-// ✅ Food pin by "ইফতারের ধরণ" (biriyani/chinese/mixed)
-// ✅ Map click anywhere -> open add form + auto set location
-// ✅ Pick mode blur stays (for button pick)
-// ✅ Premium popup kept
-// ✅ Save iftarType in Firestore + show in popup/list
+// ✅ Food pin by iftarType
+// ✅ Map click anywhere -> open modal + auto set location
+// ✅ Pick mode dim only (blur OFF in CSS)
+// ✅ Premium popup
+// ✅ FIX: submit button text never shows "সাইনিং হচ্ছে…"
 // =============================
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
@@ -25,10 +25,10 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 /* =============================
-   0) Firebase Config
+   0) Firebase Config (EXACT)
 ============================= */
 const firebaseConfig = {
-  apiKey: "AIzaSyA6SZeKVmNAsd4eAlieCTC7zYMenwJEA",
+  apiKey: "AIzaSyA6SZeKVmNAsd4eAlieCTC7zQzYMenwJEA",
   authDomain: "free-ifter.firebaseapp.com",
   projectId: "free-ifter",
   storageBucket: "free-ifter.firebasestorage.app",
@@ -227,17 +227,16 @@ const pickedLatLngEl = document.getElementById("pickedLatLng");
 const submitSpotBtn = document.getElementById("submitSpotBtn");
 
 /* =============================
-   5) Auth state → button sync
+   5) Auth state → FIX: no "সাইনিং হচ্ছে…"
 ============================= */
 function syncSubmitBtnState() {
   if (!submitSpotBtn) return;
-  if (auth.currentUser?.uid) {
-    submitSpotBtn.disabled = false;
-    submitSpotBtn.textContent = "স্পট যোগ করুন";
-  } else {
-    submitSpotBtn.disabled = true;
-    submitSpotBtn.textContent = "সাইনিং হচ্ছে…";
-  }
+
+  // লেখা সবসময় আগের মতো থাকবে
+  submitSpotBtn.textContent = "স্পট যোগ করুন";
+
+  // auth না থাকলে শুধু disable
+  submitSpotBtn.disabled = !auth.currentUser?.uid;
 }
 
 onAuthStateChanged(auth, (u) => {
@@ -321,7 +320,6 @@ async function loadSpotsAndVotes() {
     s.fakeCount = f;
     s.myVote = my;
 
-    // default type
     if (!s.iftarType) s.iftarType = "mixed";
   }
 
@@ -329,7 +327,7 @@ async function loadSpotsAndVotes() {
 }
 
 /* =============================
-   6.1) Food pin icon (by type)
+   Food pin icon (by type)
 ============================= */
 function makeFoodPinIcon(iftarType) {
   const emoji = typeEmoji(iftarType);
@@ -347,7 +345,7 @@ function makeFoodPinIcon(iftarType) {
 }
 
 /* =============================
-   6.2) Premium popup (kept)
+   Premium popup
 ============================= */
 function buildPopupHtml(spot) {
   const truth = spot.truthCount ?? 0;
@@ -371,7 +369,9 @@ function buildPopupHtml(spot) {
       <div class="spotCardBody">
         <div class="spotRow">
           <div>📍 ${area}</div>
-          <div style="color:#64748b;font-weight:800;white-space:nowrap;">${typeEmoji(spot.iftarType)} ${tLabel}</div>
+          <div style="color:#64748b;font-weight:800;white-space:nowrap;">
+            ${typeEmoji(spot.iftarType)} ${tLabel}
+          </div>
         </div>
 
         <div class="spotActions">
@@ -388,6 +388,7 @@ function buildPopupHtml(spot) {
 }
 
 let openedPopup = null;
+
 function openSpotPopup(latlng, spot) {
   if (openedPopup) {
     try { map.closePopup(openedPopup); } catch {}
@@ -407,7 +408,6 @@ function openSpotPopup(latlng, spot) {
   openedPopup = popup;
   popup.openOn(map);
 
-  // bind popup buttons
   setTimeout(() => {
     const root = document.querySelector(".leaflet-popup.spotPopup");
     if (!root) return;
@@ -429,18 +429,13 @@ function renderMarkers() {
 
   for (const s of spots) {
     if (typeof s.lat !== "number" || typeof s.lng !== "number") continue;
-
     const icon = makeFoodPinIcon(s.iftarType || "mixed");
     const m = L.marker([s.lat, s.lng], { icon });
-
     m.on("click", () => openSpotPopup([s.lat, s.lng], s));
     markerLayer.addLayer(m);
   }
 }
 
-/* =============================
-   List
-============================= */
 function renderList() {
   countEl.textContent = String(spots.length);
 
@@ -484,7 +479,6 @@ function renderList() {
     `;
   }).join("");
 
-  // vote click
   listEl.querySelectorAll(".voteBtn").forEach((btn) => {
     btn.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -494,7 +488,6 @@ function renderList() {
     });
   });
 
-  // card click -> focus marker + popup
   listEl.querySelectorAll(".card").forEach((card) => {
     card.addEventListener("click", () => {
       const id = card.getAttribute("data-spot");
@@ -507,7 +500,7 @@ function renderList() {
 }
 
 /* =============================
-   7) Voting
+   Voting
 ============================= */
 async function castVote(spotId, value) {
   try {
@@ -522,7 +515,6 @@ async function castVote(spotId, value) {
   const s = spots.find((x) => x.id === spotId);
   if (!s) return;
 
-  // optimistic
   if (s.myVote === "truth") s.truthCount = Math.max(0, (s.truthCount || 0) - 1);
   if (s.myVote === "fake") s.fakeCount = Math.max(0, (s.fakeCount || 0) - 1);
 
@@ -565,8 +557,7 @@ async function castVote(spotId, value) {
 }
 
 /* =============================
-   8) Add Spot Modal + Map Pick
-   ✅ NEW: map click opens modal + auto sets location
+   Add Spot Modal + Map Pick
 ============================= */
 let pickMode = false;
 let pickedLatLng = null;
@@ -600,32 +591,26 @@ function closeModal() {
   }
 }
 
-addSpotBtn?.addEventListener("click", () => {
-  openModal();
-});
-
+addSpotBtn?.addEventListener("click", () => openModal());
 closeModalBtn?.addEventListener("click", closeModal);
 
-// pick mode (kept)
 pickLocationBtn?.addEventListener("click", () => {
   pickMode = true;
   modal?.classList.add("pickMode");
   if (pickedLatLngEl) pickedLatLngEl.textContent = "📍 এখন ম্যাপে ক্লিক করুন";
 });
 
-// ✅ Map click: ALWAYS opens form + sets location (if inside Rajshahi)
+// ✅ Map click: open modal + auto set location (inside Rajshahi)
 map.on("click", (e) => {
   const { lat, lng } = e.latlng;
 
   if (!isInRajshahi(lat, lng)) {
-    // if modal open, show warning text
     if (!modal?.classList.contains("hidden")) {
       if (pickedLatLngEl) pickedLatLngEl.textContent = "⚠️ রাজশাহীর ভিতরে লোকেশন দিন";
     }
     return;
   }
 
-  // If pickMode: just pick and keep modal open
   if (pickMode) {
     pickMode = false;
     modal?.classList.remove("pickMode");
@@ -633,15 +618,12 @@ map.on("click", (e) => {
     return;
   }
 
-  // Normal click: open form + auto set
   openModal();
   setPicked(lat, lng);
 });
 
-// Change preview pin icon when type changes
 iftarTypeEl?.addEventListener("change", () => {
   if (!pickedLatLng) return;
-  // re-render preview marker icon to match selected type
   const { lat, lng } = pickedLatLng;
   if (pickPreviewMarker) markerLayer.removeLayer(pickPreviewMarker);
   pickPreviewMarker = L.marker([lat, lng], { icon: makeFoodPinIcon(iftarTypeEl.value || "mixed") });
@@ -651,8 +633,8 @@ iftarTypeEl?.addEventListener("change", () => {
 submitSpotBtn?.addEventListener("click", submitSpot);
 
 async function submitSpot() {
-  submitSpotBtn.disabled = true;
-  submitSpotBtn.textContent = "সাইনিং হচ্ছে…";
+  // ✅ FIX: never show "সাইনিং হচ্ছে…"
+  submitSpotBtn.textContent = "স্পট যোগ করুন";
 
   try {
     const u = await ensureAuthReady();
@@ -660,8 +642,7 @@ async function submitSpot() {
     authReady = true;
   } catch (e) {
     console.error(e);
-    submitSpotBtn.disabled = false;
-    submitSpotBtn.textContent = "স্পট যোগ করুন";
+    syncSubmitBtnState();
     return;
   }
 
@@ -697,7 +678,7 @@ async function submitSpot() {
     const docRef = await addDoc(collection(db, "spots"), {
       name,
       area,
-      iftarType,               // ✅ NEW
+      iftarType,
       lat: pickedLatLng.lat,
       lng: pickedLatLng.lng,
       createdBy: me.uid,
@@ -731,11 +712,14 @@ async function submitSpot() {
     submitSpotBtn.disabled = false;
     submitSpotBtn.textContent = "⚠️ পারমিশন/নেট সমস্যা";
     setTimeout(syncSubmitBtnState, 1200);
+  } finally {
+    // ensure state text is restored after errors
+    syncSubmitBtnState();
   }
 }
 
 /* =============================
-   9) Refresh + Boot (hide loader when ready)
+   Refresh + Boot
 ============================= */
 async function refreshAll() {
   await loadSpotsAndVotes();
