@@ -274,12 +274,55 @@ let spotsById = new Map();
 const markerLayer = L.layerGroup().addTo(map);
 const markerBySpot = new Map();
 
-const sessionCache = {
+const firestoreCache = {
+  loaded: false,
   spots: null,
   votes: null,
-  at: 0,
+  inFlight: null,
 };
-const CACHE_TTL = 15000;
+
+function clearFirestoreCache() {
+  firestoreCache.loaded = false;
+  firestoreCache.spots = null;
+  firestoreCache.votes = null;
+  firestoreCache.inFlight = null;
+}
+
+async function fetchFirestoreDataOnce() {
+  if (firestoreCache.loaded && firestoreCache.spots && firestoreCache.votes) {
+    return { spots: firestoreCache.spots, votes: firestoreCache.votes };
+  }
+
+  if (firestoreCache.inFlight) return firestoreCache.inFlight;
+
+  firestoreCache.inFlight = Promise.all([
+    getDocs(collection(db, "spots")),
+    getDocs(collection(db, "votes")),
+  ])
+    .then(([spotSnap, voteSnap]) => {
+      const spotRows = [];
+      const voteRows = [];
+
+      spotSnap.forEach((d) => {
+        spotRows.push({ id: d.id, ...(d.data() || {}) });
+      });
+
+      voteSnap.forEach((d) => {
+        voteRows.push(d.data() || {});
+      });
+
+      firestoreCache.spots = spotRows;
+      firestoreCache.votes = voteRows;
+      firestoreCache.loaded = true;
+
+      return { spots: spotRows, votes: voteRows };
+    })
+    .finally(() => {
+      firestoreCache.inFlight = null;
+    });
+
+  return firestoreCache.inFlight;
+}
 
 function escapeHtml(str) {
   return String(str || "")
@@ -309,48 +352,30 @@ function typeEmoji(t) {
   return "🍽️";
 }
 
-async function loadSpotsAndVotes(force = false) {
-  const now = Date.now();
-  const canUseCache =
-    !force &&
-    sessionCache.spots &&
-    sessionCache.votes &&
-    now - sessionCache.at <= CACHE_TTL;
+function toMillis(value) {
+  if (!value) return 0;
+  if (typeof value.toMillis === "function") return value.toMillis();
+  if (value instanceof Date) return value.getTime();
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+}
 
-  let spotSnap;
-  let voteSnap;
-  if (canUseCache) {
-    spotSnap = sessionCache.spots;
-    voteSnap = sessionCache.votes;
-  } else {
-    [spotSnap, voteSnap] = await Promise.all([
-      getDocs(collection(db, "spots")),
-      getDocs(collection(db, "votes")),
-    ]);
-    sessionCache.spots = spotSnap;
-    sessionCache.votes = voteSnap;
-    sessionCache.at = now;
-  }
+async function loadSpotsAndVotes() {
+  const { spots: cachedSpots, votes: cachedVotes } = await fetchFirestoreDataOnce();
 
-  const nextSpots = [];
-  spotSnap.forEach((d) => {
-    const data = d.data() || {};
-    nextSpots.push({
-      id: d.id,
-      ...data,
-      truthCount: 0,
-      fakeCount: 0,
-      myVote: null,
-    });
-  });
+  const nextSpots = cachedSpots.map((row) => ({
+    ...row,
+    truthCount: 0,
+    fakeCount: 0,
+    myVote: null,
+  }));
 
   const votesBySpot = new Map();
-  voteSnap.forEach((d) => {
-    const vote = d.data();
-    if (!vote?.spotId || !vote?.value) return;
+  for (const vote of cachedVotes) {
+    if (!vote?.spotId || !vote?.value) continue;
     if (!votesBySpot.has(vote.spotId)) votesBySpot.set(vote.spotId, []);
     votesBySpot.get(vote.spotId).push(vote);
-  });
+  }
 
   for (const s of nextSpots) {
     const arr = votesBySpot.get(s.id) || [];
@@ -369,6 +394,12 @@ async function loadSpotsAndVotes(force = false) {
     s.myVote = my;
     if (!s.iftarType) s.iftarType = "mixed";
   }
+
+  nextSpots.sort((a, b) => {
+    const diff = toMillis(b.createdAt) - toMillis(a.createdAt);
+    if (diff !== 0) return diff;
+    return String(b.id || "").localeCompare(String(a.id || ""));
+  });
 
   spots = nextSpots;
   spotsById = new Map(spots.map((spot) => [spot.id, spot]));
@@ -582,10 +613,18 @@ async function castVote(spotId, value) {
       value,
       createdAt: serverTimestamp(),
     });
-    sessionCache.votes = null;
+
+    if (Array.isArray(firestoreCache.votes)) {
+      const withoutMine = firestoreCache.votes.filter(
+        (vote) => !(vote?.spotId === spotId && vote?.uid === me.uid)
+      );
+      firestoreCache.votes = [...withoutMine, { spotId, uid: me.uid, value }];
+      firestoreCache.loaded = true;
+    }
   } catch (e) {
     console.error("Vote write failed:", e);
-    await refreshAll(true);
+    clearFirestoreCache();
+    await refreshAll();
   }
 }
 
@@ -735,14 +774,29 @@ async function submitSpot() {
     spots.unshift(newSpot);
     spotsById.set(newSpot.id, newSpot);
 
+    if (Array.isArray(firestoreCache.spots)) {
+      firestoreCache.spots = [
+        {
+          id: newSpot.id,
+          name: newSpot.name,
+          area: newSpot.area,
+          iftarType: newSpot.iftarType,
+          lat: newSpot.lat,
+          lng: newSpot.lng,
+          createdBy: newSpot.createdBy,
+          createdAt: newSpot.createdAt,
+        },
+        ...firestoreCache.spots,
+      ];
+      firestoreCache.loaded = true;
+    }
+
     renderMarkers();
     renderList();
 
     spotNameEl.value = "";
     spotAreaEl.value = "";
     iftarTypeEl.value = "";
-
-    sessionCache.spots = null;
 
     closeModal();
   } catch (e) {
@@ -760,8 +814,8 @@ async function submitSpot() {
 }
 
 /* Boot */
-async function refreshAll(force = false) {
-  await loadSpotsAndVotes(force);
+async function refreshAll() {
+  await loadSpotsAndVotes();
   renderMarkers();
   renderList();
 }
@@ -782,7 +836,7 @@ function waitForTilesLoaded(timeoutMs = 9000) {
 
 (async function boot() {
   try {
-    await refreshAll(true);
+    await refreshAll();
     await waitForTilesLoaded();
     setTimeout(hideLoading, 250);
   } catch (e) {
